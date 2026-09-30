@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="avBg" cx="50%" cy="32%" r="75%">
+      <stop offset="0" stop-color="#16284e"/><stop offset="1" stop-color="#060b1c"/>
+    </radialGradient>
+    <linearGradient id="avSkin" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#bdf0ff"/><stop offset=".55" stop-color="#7fd0ec"/><stop offset="1" stop-color="#4b93bd"/>
+    </linearGradient>
+    <radialGradient id="avHood" cx="50%" cy="30%" r="80%">
+      <stop offset="0" stop-color="#22345a"/><stop offset="1" stop-color="#0a1428"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="256" fill="url(#avBg)"/>
+  <circle cx="120" cy="110" r="3" fill="#cdeaff"/>
+  <circle cx="392" cy="96" r="2.6" fill="#fff"/>
+  <circle cx="420" cy="180" r="2" fill="#bdd4ff"/>
+  <circle cx="84" cy="240" r="2.2" fill="#fff"/>
+  <circle cx="360" cy="300" r="2.4" fill="#cdeaff"/>
+  <!-- 宇航卫衣 -->
+  <path d="M96,512 C112,372 196,330 256,330 C316,330 400,372 416,512 Z" fill="url(#avHood)"/>
+  <path d="M176,352 q80,46 160,0 L352,512 L160,512 Z" fill="#0d1d38"/>
+  <!-- 兜帽 -->
+  <path d="M132,286 C128,150 182,78 256,78 C330,78 384,150 380,286 C350,236 312,216 256,216 C200,216 162,236 132,286 Z" fill="#132648"/>
+  <!-- 头 -->
+  <ellipse cx="256" cy="248" rx="116" ry="134" fill="url(#avSkin)"/>
+  <!-- 大眼睛 -->
+  <path d="M176,238 C200,198 240,200 262,240 C240,276 200,278 176,238 Z" fill="#08131f"/>
+  <path d="M250,240 C272,200 312,198 336,238 C312,278 272,276 250,240 Z" fill="#08131f"/>
+  <circle cx="222" cy="236" r="10" fill="#dff6ff"/>
+  <circle cx="318" cy="236" r="10" fill="#dff6ff"/>
+  <circle cx="212" cy="228" r="4" fill="#fff"/>
+  <circle cx="308" cy="228" r="4" fill="#fff"/>
+  <!-- 腮红光点 -->
+  <ellipse cx="176" cy="286" rx="18" ry="9" fill="#8fe6ff" opacity=".35"/>
+  <ellipse cx="336" cy="286" rx="18" ry="9" fill="#8fe6ff" opacity=".35"/>
+  <!-- 微笑 -->
+  <path d="M228,312 Q256,336 284,312" fill="none" stroke="#2f6f8e" stroke-width="7" stroke-linecap="round"/>
+  <!-- 荧光雀斑 -->
+  <g fill="#d9fbff" opacity=".8">
+    <circle cx="200" cy="286" r="4"/><circle cx="312" cy="286" r="4"/>
+    <circle cx="256" cy="298" r="3.4"/><circle cx="240" cy="160" r="3"/><circle cx="276" cy="158" r="3"/>
+  </g>
+</svg>

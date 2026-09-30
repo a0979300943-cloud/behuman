@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <radialGradient id="bgBase" cx="50%" cy="36%" r="90%">
+      <stop offset="0" stop-color="#0d1533"/><stop offset=".6" stop-color="#070c20"/><stop offset="1" stop-color="#04060f"/>
+    </radialGradient>
+    <radialGradient id="bgNeb1" cx="22%" cy="30%" r="42%">
+      <stop offset="0" stop-color="#3f7bd9" stop-opacity=".35"/><stop offset="1" stop-color="#3f7bd9" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bgNeb2" cx="78%" cy="68%" r="48%">
+      <stop offset="0" stop-color="#2fa8a8" stop-opacity=".28"/><stop offset="1" stop-color="#2fa8a8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bgNeb3" cx="58%" cy="12%" r="36%">
+      <stop offset="0" stop-color="#7a5cd8" stop-opacity=".22"/><stop offset="1" stop-color="#7a5cd8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bgPlanet" cx="40%" cy="34%" r="70%">
+      <stop offset="0" stop-color="#8fd4ff"/><stop offset=".7" stop-color="#2b6fb8"/><stop offset="1" stop-color="#10294a"/>
+    </radialGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgBase)"/>
+  <rect width="1600" height="900" fill="url(#bgNeb1)"/>
+  <rect width="1600" height="900" fill="url(#bgNeb2)"/>
+  <rect width="1600" height="900" fill="url(#bgNeb3)"/>
+  <!-- 遥远的蓝色星球 -->
+  <circle cx="1420" cy="168" r="52" fill="url(#bgPlanet)" opacity=".8"/>
+  <circle cx="1420" cy="168" r="74" fill="#6ec0ff" opacity=".1"/>
+  <path d="M1396,158 q18,-12 40,-4" stroke="#cfeeff" stroke-width="4" opacity=".4" fill="none" stroke-linecap="round"/>
+</svg>

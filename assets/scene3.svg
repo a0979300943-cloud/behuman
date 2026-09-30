@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="space3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#150b33"/><stop offset=".55" stop-color="#0a1030"/><stop offset="1" stop-color="#050718"/>
+    </linearGradient>
+    <radialGradient id="neb3a" cx="24%" cy="26%" r="42%">
+      <stop offset="0" stop-color="#7b4fd8" stop-opacity=".5"/><stop offset="1" stop-color="#7b4fd8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="neb3b" cx="70%" cy="78%" r="46%">
+      <stop offset="0" stop-color="#2b6fd6" stop-opacity=".4"/><stop offset="1" stop-color="#2b6fd6" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="sun3" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#fff7e2"/><stop offset=".35" stop-color="#ffd98a" stop-opacity=".85"/><stop offset="1" stop-color="#ffd98a" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="earth3" cx="38%" cy="32%" r="78%">
+      <stop offset="0" stop-color="#9fe0ff"/><stop offset=".45" stop-color="#3d92dd"/><stop offset=".78" stop-color="#1b4e8c"/><stop offset="1" stop-color="#0b2347"/>
+    </radialGradient>
+    <linearGradient id="hull" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d9e9f8"/><stop offset=".5" stop-color="#8fa9c6"/><stop offset="1" stop-color="#4c6284"/>
+    </linearGradient>
+    <linearGradient id="flame" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fff2c8" stop-opacity="0"/><stop offset=".5" stop-color="#ffb05e" stop-opacity=".9"/><stop offset="1" stop-color="#ff7a4a" stop-opacity="0"/>
+    </linearGradient>
+    <pattern id="p3" width="250" height="250" patternUnits="userSpaceOnUse">
+      <circle cx="26" cy="44" r="1.4" fill="#dceaff"/>
+      <circle cx="132" cy="36" r="2.2" fill="#fff"/>
+      <circle cx="206" cy="96" r="1.2" fill="#bdd4ff"/>
+      <circle cx="62" cy="150" r="1" fill="#fff"/>
+      <circle cx="170" cy="190" r="1.6" fill="#dceaff"/>
+      <circle cx="222" cy="220" r=".9" fill="#fff"/>
+      <circle cx="34" cy="214" r="1.2" fill="#bdd4ff"/>
+      <circle cx="100" cy="110" r=".8" fill="#fff"/>
+    </pattern>
+    <clipPath id="earthClip3"><circle cx="1180" cy="560" r="250"/></clipPath>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#space3)"/>
+  <rect width="1600" height="900" fill="url(#neb3a)"/>
+  <rect width="1600" height="900" fill="url(#neb3b)"/>
+  <rect width="1600" height="900" fill="url(#p3)"/>
+
+  <!-- 掠过的星轨 -->
+  <g stroke="#cfe4ff" stroke-linecap="round" opacity=".35">
+    <line x1="120" y1="180" x2="220" y2="172" stroke-width="1.4"/>
+    <line x1="320" y1="250" x2="400" y2="244" stroke-width="1"/>
+    <line x1="90" y1="620" x2="180" y2="614" stroke-width="1.2"/>
+  </g>
+
+  <!-- 太阳与地球 -->
+  <circle cx="1210" cy="540" r="430" fill="url(#sun3)"/>
+  <circle cx="1180" cy="560" r="250" fill="url(#earth3)"/>
+  <g clip-path="url(#earthClip3)">
+    <path d="M960,470 q70,-70 160,-40 q60,20 120,-6 q40,30 -10,60 q-90,50 -200,20 q-60,-16 -70,-34 Z" fill="#bfecc9" opacity=".5"/>
+    <path d="M1010,610 q90,40 190,-10" fill="none" stroke="#dff4ea" stroke-width="26" opacity=".45" stroke-linecap="round"/>
+    <path d="M1120,690 q120,-10 220,-70" fill="none" stroke="#dff4ea" stroke-width="18" opacity=".35" stroke-linecap="round"/>
+    <rect x="930" y="760" width="520" height="120" fill="#081a36" opacity=".55"/>
+  </g>
+  <!-- 晨昏线 -->
+  <circle cx="1180" cy="560" r="250" fill="none" stroke="#bfe8ff" stroke-width="3" opacity=".5"/>
+  <path d="M940,470 A250,250 0 0 0 930,640" fill="none" stroke="#ffd98a" stroke-width="6" opacity=".7"/>
+  <circle cx="1180" cy="560" r="272" fill="none" stroke="#7fc8ff" stroke-width="2" opacity=".25"/>
+
+  <!-- 小型侦察飞船 -->
+  <g transform="translate(150,520) rotate(-6)">
+    <!-- 尾焰 -->
+    <polygon points="-150,-10 -20,16 -20,44 -150,30" fill="url(#flame)" opacity=".8"/>
+    <polygon points="-110,2 -36,18 -36,38 -110,30" fill="#ffe0a0" opacity=".55"/>
+    <!-- 船身 -->
+    <path d="M-20,-8 L300,-44 L470,8 L440,26 L300,20 L-20,40 Z" fill="url(#hull)"/>
+    <path d="M300,-44 L470,8 L440,26 L300,20 Z" fill="#6f8cb0"/>
+    <!-- 驾驶舱 -->
+    <path d="M300,-40 L392,-22 L430,-4 L300,-14 Z" fill="#9fe8ff" opacity=".85"/>
+    <path d="M300,-40 L392,-22 L430,-4 L300,-14 Z" fill="none" stroke="#eafcff" stroke-width="2" opacity=".7"/>
+    <!-- 舱内小外星人 -->
+    <circle cx="352" cy="-20" r="8" fill="#0a2340"/>
+    <ellipse cx="352" cy="-21" rx="5.5" ry="4.6" fill="#8fdcf2"/>
+    <!-- 灯带 -->
+    <line x1="40" y1="2" x2="260" y2="-14" stroke="#6ee7ff" stroke-width="3" opacity=".7"/>
+    <circle cx="60" cy="6" r="4" fill="#ffd98a"/>
+    <circle cx="130" cy="-1" r="4" fill="#6ee7ff"/>
+    <circle cx="200" cy="-8" r="4" fill="#ff8fa8"/>
+    <!-- 翼 -->
+    <path d="M120,36 L196,86 L250,34 Z" fill="#5c7498"/>
+  </g>
+</svg>

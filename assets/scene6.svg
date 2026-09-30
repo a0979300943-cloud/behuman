@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="space6" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#070b20"/><stop offset="1" stop-color="#0a1430"/>
+    </linearGradient>
+    <radialGradient id="neb6" cx="72%" cy="16%" r="45%">
+      <stop offset="0" stop-color="#2fb7b0" stop-opacity=".35"/><stop offset="1" stop-color="#2fb7b0" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="neb6b" cx="18%" cy="22%" r="40%">
+      <stop offset="0" stop-color="#5b7cff" stop-opacity=".28"/><stop offset="1" stop-color="#5b7cff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="earth6" cx="42%" cy="18%" r="90%">
+      <stop offset="0" stop-color="#a9e4ff"/><stop offset=".4" stop-color="#3d92dd"/><stop offset=".75" stop-color="#173f74"/><stop offset="1" stop-color="#081a33"/>
+    </radialGradient>
+    <linearGradient id="atmo6" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe9b8" stop-opacity=".95"/>
+      <stop offset=".5" stop-color="#ffd98a" stop-opacity=".5"/>
+      <stop offset="1" stop-color="#ffd98a" stop-opacity="0"/>
+    </linearGradient>
+    <pattern id="p6" width="250" height="250" patternUnits="userSpaceOnUse">
+      <circle cx="26" cy="40" r="1.4" fill="#dceaff"/>
+      <circle cx="132" cy="30" r="1" fill="#fff"/>
+      <circle cx="206" cy="96" r="1.6" fill="#bdd4ff"/>
+      <circle cx="62" cy="150" r="1" fill="#fff"/>
+      <circle cx="170" cy="190" r="1.2" fill="#dceaff"/>
+      <circle cx="222" cy="214" r=".9" fill="#fff"/>
+      <circle cx="96" cy="104" r="2.1" fill="#fff"/>
+    </pattern>
+    <clipPath id="earthClip6"><circle cx="800" cy="1080" r="720"/></clipPath>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#space6)"/>
+  <rect width="1600" height="900" fill="url(#neb6)"/>
+  <rect width="1600" height="900" fill="url(#neb6b)"/>
+  <rect width="1600" height="900" fill="url(#p6)"/>
+
+  <!-- 大气层外圈辉光 -->
+  <circle cx="800" cy="1080" r="752" fill="none" stroke="#a9d8ff" stroke-width="10" opacity=".25"/>
+  <circle cx="800" cy="1080" r="776" fill="none" stroke="#7fc8ff" stroke-width="4" opacity=".2"/>
+
+  <!-- 地球 -->
+  <circle cx="800" cy="1080" r="720" fill="url(#earth6)"/>
+  <g clip-path="url(#earthClip6)">
+    <!-- 大陆 -->
+    <path d="M420,760 q120,-90 260,-40 q90,30 140,-20 q30,50 -30,90 q-120,70 -260,20 q-100,-36 -110,-50 Z" fill="#bfe8c8" opacity=".55"/>
+    <path d="M900,700 q150,-60 300,10 q80,40 40,100 q-140,80 -310,20 q-70,-26 -30,-130 Z" fill="#a8dcba" opacity=".5"/>
+    <path d="M600,940 q180,50 360,0" fill="none" stroke="#e8fbf0" stroke-width="34" opacity=".4" stroke-linecap="round"/>
+    <path d="M300,900 q160,90 360,60" fill="none" stroke="#e8fbf0" stroke-width="26" opacity=".32" stroke-linecap="round"/>
+    <path d="M980,920 q220,70 420,20" fill="none" stroke="#e8fbf0" stroke-width="30" opacity=".35" stroke-linecap="round"/>
+    <!-- 昼面高光 -->
+    <rect x="0" y="380" width="1600" height="600" fill="#bfe6ff" opacity=".12"/>
+  </g>
+  <!-- 黎明金边 -->
+  <path d="M104,1000 A720,720 0 0 1 1496,1000" fill="none" stroke="url(#atmo6)" stroke-width="16" stroke-linecap="round"/>
+  <path d="M170,1010 A720,720 0 0 1 1430,1010" fill="none" stroke="#fff3d6" stroke-width="3" opacity=".8"/>
+
+  <!-- 返航小飞船 -->
+  <g transform="translate(1060,250) rotate(24)" opacity=".95">
+    <polygon points="-60,-4 -4,4 -4,12 -60,10" fill="#ffb05e" opacity=".6"/>
+    <path d="M0,-6 L70,-16 L104,-2 L70,8 L0,10 Z" fill="#b9cfe6"/>
+    <path d="M66,-14 L100,-3 L70,2 Z" fill="#9fe8ff" opacity=".9"/>
+  </g>
+</svg>
