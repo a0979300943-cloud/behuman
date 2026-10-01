@@ -5,7 +5,7 @@ window.STORY = [
     lines: [
       '我是一名星际航空员。',
       '日复一日，独自航行在寂静的深空航线上。',
-      '直到那一天，一段来自蓝色星球的信号，闯进了我的接收器——'
+      '直到一天，一段来自某个蓝色星球的信号，闯进了我的接收器——'
     ]
   },
   {
@@ -49,8 +49,8 @@ window.STORY = [
 
 /* 依据台词长度估算停留时长（毫秒） */
 window.lineDuration = function (text) {
-  const base = 2600;
-  const per = 210;
+  const base = 1500;
+  const per = 150;
   return Math.min(7000, base + text.length * per);
 };
 

@@ -30,6 +30,51 @@
     feedback: 'bh.feedback'
   };
 
+  /* ---------------- 媒体文件存储（IndexedDB，存 Blob，容量大） ---------------- */
+  const media = {
+    DB_NAME: 'bh-media',
+    STORE: 'files',
+    _dbp: null,
+    db() {
+      if (this._dbp) return this._dbp;
+      this._dbp = new Promise((resolve, reject) => {
+        try {
+          const r = indexedDB.open(this.DB_NAME, 1);
+          r.onupgradeneeded = () => {
+            if (!r.result.objectStoreNames.contains(this.STORE)) r.result.createObjectStore(this.STORE);
+          };
+          r.onsuccess = () => resolve(r.result);
+          r.onerror = () => reject(r.error);
+        } catch (e) { reject(e); }
+      });
+      return this._dbp;
+    },
+    async tx(mode, fn) {
+      const d = await this.db();
+      return new Promise((resolve, reject) => {
+        const t = d.transaction(this.STORE, mode);
+        const req = fn(t.objectStore(this.STORE));
+        t.oncomplete = () => resolve(req && req.result);
+        t.onerror = () => reject(t.error);
+        t.onabort = () => reject(t.error);
+      });
+    },
+    put(key, file) {
+      return this.tx('readwrite', s => s.put({
+        blob: file, name: file.name, type: file.type,
+        size: file.size, addedAt: new Date().toISOString()
+      }, key));
+    },
+    get(key) { return this.tx('readonly', s => s.get(key)).then(r => r || null).catch(() => null); },
+    del(key) { return this.tx('readwrite', s => s.delete(key)).catch(() => {}); },
+    clear() { return this.tx('readwrite', s => s.clear()).catch(() => {}); }
+  };
+  function fmtSize(bytes) {
+    if (!bytes && bytes !== 0) return '';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+  }
+
   const freshState = () => ({
     totalMinutes: 0,
     sessions: 0,
@@ -162,6 +207,8 @@
     text: $('#intro-text'),
     bar: $('#intro-bar'),
     skip: $('#intro-skip'),
+    waves: $('#intro-waves'),
+    wavesRAF: null,
     timers: [],
     started: false,
     total: 0,
@@ -186,11 +233,15 @@
       this.el.hidden = false;
       this.el.classList.add('is-loading');
       this.text.textContent = '正在接收来自深空的信号…';
+      this.playStory();
+    },
 
+    async playStory() {
       await Promise.race([
         this.preload(),
         new Promise(r => setTimeout(r, 9000))
       ]);
+      if (!this.started) return;
       this.el.classList.remove('is-loading');
 
       // 总时长（含每场 0.9s 转场）
@@ -245,13 +296,94 @@
       void this.text.offsetWidth;
       this.text.textContent = line;
       this.text.classList.add('caption-in');
+      this.syncWaves(line);
       this.timers.push(setTimeout(() => this.runLine(si, li + 1), this.lineMs(line)));
+    },
+
+    /* ---- 「快乐」信号波形画面：台词匹配时显示，否则隐藏 ---- */
+    syncWaves(line) {
+      if (line && line.indexOf('快乐') !== -1) this.showWaves();
+      else this.hideWaves();
+    },
+
+    showWaves() {
+      if (this.wavesRAF) return;
+      const cv = this.waves;
+      cv.hidden = false;
+      requestAnimationFrame(() => cv.classList.add('show'));
+      const ctx = cv.getContext('2d');
+      const W = cv.width, H = cv.height, mid = H / 2;
+      // 背景杂波：频率、振幅各异
+      const bg = [
+        { f: 2.2, a: 44, sp: 1.6, ph: 0.0, c: 'rgba(124,232,255,0.30)', w: 1.6 },
+        { f: 3.6, a: 66, sp: -1.2, ph: 1.4, c: 'rgba(110,150,255,0.24)', w: 1.4 },
+        { f: 5.4, a: 28, sp: 2.1, ph: 2.6, c: 'rgba(160,120,255,0.22)', w: 1.3 },
+        { f: 7.8, a: 50, sp: -1.8, ph: 3.8, c: 'rgba(90,200,220,0.20)', w: 1.2 },
+        { f: 9.6, a: 22, sp: 2.6, ph: 5.1, c: 'rgba(124,232,255,0.15)', w: 1.1 }
+      ];
+      const env = x => Math.sin(Math.PI * x / W); // 两端收束，中间最大
+      const t0 = performance.now();
+      const self = this;
+      const draw = (now) => {
+        const t = (now - t0) / 1000;
+        ctx.clearRect(0, 0, W, H);
+
+        // 仪器网格
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(124,232,255,0.07)';
+        for (let x = 80; x < W; x += 80) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+        for (let y = 62; y < H; y += 62) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+        // 中轴
+        ctx.strokeStyle = 'rgba(124,232,255,0.16)';
+        ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(W, mid); ctx.stroke();
+
+        const plot = (f, a, sp, ph) => {
+          ctx.beginPath();
+          for (let x = 0; x <= W; x += 4) {
+            const y = mid + Math.sin(x / W * Math.PI * 2 * f + t * sp + ph) * a * env(x);
+            if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        };
+
+        bg.forEach(wv => {
+          ctx.strokeStyle = wv.c;
+          ctx.lineWidth = wv.w;
+          plot(wv.f, wv.a, wv.sp, wv.ph);
+        });
+
+        // 橙色主波：频率最高、振幅最大
+        ctx.save();
+        ctx.shadowColor = 'rgba(255,158,64,0.85)';
+        ctx.shadowBlur = 24;
+        ctx.strokeStyle = '#ffb35c';
+        ctx.lineWidth = 4.2;
+        plot(13.5, 106, 3.0, 0);
+        ctx.restore();
+
+        // 仪器标注
+        ctx.font = '24px "Courier New", monospace';
+        ctx.fillStyle = 'rgba(147,166,200,0.85)';
+        ctx.fillText('SIGNAL MONITOR · EARTH BAND', 30, 44);
+        ctx.font = 'bold 26px "Courier New", monospace';
+        ctx.fillStyle = '#ffb35c';
+        ctx.fillText('▲ 「快乐」 FREQ:MAX  AMP:MAX', 30, H - 28);
+
+        self.wavesRAF = requestAnimationFrame(draw);
+      };
+      this.wavesRAF = requestAnimationFrame(draw);
+    },
+
+    hideWaves() {
+      if (this.wavesRAF) { cancelAnimationFrame(this.wavesRAF); this.wavesRAF = null; }
+      if (this.waves) { this.waves.classList.remove('show'); this.waves.hidden = true; }
     },
 
     finish() {
       clearInterval(this.progressTimer);
       this.timers.forEach(clearTimeout);
       this.timers = [];
+      this.hideWaves();
       this.bar.style.width = '100%';
       this.el.classList.add('intro--out');
       setTimeout(() => {
@@ -308,8 +440,31 @@
       '呼吸声太大了，小声一点…',
       '就快了，警报即将解除…'
     ],
-    statusIdx: 0
+    statusIdx: 0,
+    bgmURL: null
   };
+
+  function startBgm() {
+    media.get('audio').then(rec => {
+      if (!rec || !rec.blob || !focus.running) return;
+      const a = $('#focus-audio');
+      focus.bgmURL = URL.createObjectURL(rec.blob);
+      a.src = focus.bgmURL;
+      a.volume = 0.45;
+      a.muted = false;
+      $('#focus-bgm').textContent = '🎵';
+      $('#focus-bgm').hidden = false;
+      a.play().catch(() => {});
+    });
+  }
+  function stopBgm() {
+    const a = $('#focus-audio');
+    a.pause();
+    a.removeAttribute('src');
+    try { a.load(); } catch (e) {}
+    $('#focus-bgm').hidden = true;
+    if (focus.bgmURL) { URL.revokeObjectURL(focus.bgmURL); focus.bgmURL = null; }
+  }
 
   function initDurationUI() {
     const btns = $$('#duration-options button');
@@ -369,6 +524,8 @@
       focus.statusIdx = (focus.statusIdx + 1) % focus.statuses.length;
       $('#focus-status').textContent = focus.statuses[focus.statusIdx];
     }, 22000);
+
+    startBgm();
   }
 
   function tick() {
@@ -390,6 +547,7 @@
     focus.running = false;
     clearInterval(focus.timer);
     clearInterval(focus.statusTimer);
+    stopBgm();
     document.title = 'behuman · 成为人类吧！';
 
     const run = $('#focus-running');
@@ -485,6 +643,18 @@
     }
   });
 
+  $('#focus-bgm').addEventListener('click', () => {
+    const a = $('#focus-audio');
+    if (a.paused) {
+      a.muted = false;
+      a.play().catch(() => {});
+      $('#focus-bgm').textContent = '🎵';
+    } else {
+      a.muted = !a.muted;
+      $('#focus-bgm').textContent = a.muted ? '🔇' : '🎵';
+    }
+  });
+
   $('#focus-start').addEventListener('click', startFocus);
   $('#result-back').addEventListener('click', () => { closeModal('focus-result'); sfx.select(); });
 
@@ -551,7 +721,50 @@
   function syncSettingsUI() {
     $('#set-default-min').value = String(settings.defaultMin);
     $('#set-sound').checked = !!settings.sound;
+    syncMediaUI();
   }
+
+  function mediaLabel(rec, emptyText) {
+    if (!rec) return emptyText;
+    return rec.name + '（' + fmtSize(rec.size) + '）';
+  }
+  function syncMediaUI() {
+    media.get('audio').then(rec => {
+      $('#set-audio-name').textContent = mediaLabel(rec, '未导入 · 专注时无背景音乐');
+      $('#set-audio-clear').hidden = !rec;
+    });
+  }
+
+  function bindMediaImport(btnId, inputId, clearId, key, maxMB) {
+    const input = $('#' + inputId);
+    $('#' + btnId).addEventListener('click', () => input.click());
+    input.addEventListener('change', () => {
+      const file = input.files && input.files[0];
+      input.value = '';
+      if (!file) return;
+      if (file.type && file.type.indexOf('audio/') !== 0) {
+        toast('请选择音频文件');
+        return;
+      }
+      if (file.size > maxMB * 1024 * 1024) {
+        if (!confirm('文件较大（' + fmtSize(file.size) + '），保存后会占用本机浏览器存储空间，确定导入吗？')) return;
+      }
+      toast('正在导入…');
+      media.put(key, file).then(() => {
+        syncMediaUI();
+        toast('导入成功');
+        sfx.success();
+      }).catch(() => toast('导入失败：浏览器存储空间不足或不可用'));
+    });
+    $('#' + clearId).addEventListener('click', () => {
+      if (!confirm('移除已导入的音频？')) return;
+      media.del(key).then(() => {
+        syncMediaUI();
+        toast('已移除');
+      });
+    });
+  }
+  bindMediaImport('set-audio-btn', 'set-audio-file', 'set-audio-clear', 'audio', 100);
   $('#set-default-min').addEventListener('change', (e) => {
     settings.defaultMin = Number(e.target.value);
     saveSettings();
@@ -576,33 +789,88 @@
     if (!confirm('将清空全部专注记录、三个舱位存档与设置，且无法恢复。确定吗？')) return;
     if (!confirm('真的要让外星人忘记在地球上的一切吗？')) return;
     Object.keys(KEY).forEach(k => store.remove(KEY[k]));
+    media.clear();
     state = freshState();
     settings = { defaultMin: 25, sound: true };
     slots = { 1: null, 2: null, 3: null };
     renderStats();
     syncSettingsUI();
     closeModal('modal-settings');
-    toast('所有数据已清空');
+    toast('所有数据已清空（含导入的音频与视频）');
   });
 
-  /* ---------------- 意见反馈 ---------------- */
+  /* ---------------- 意见反馈（通过 FormSubmit 转发到邮箱） ---------------- */
+  const FB_ENDPOINT = 'https://formsubmit.co/ajax/emmhuyalan@qq.com';
   const fbContent = $('#fb-content');
   fbContent.addEventListener('input', () => { $('#fb-count').textContent = fbContent.value.length; });
-  $('#feedback-form').addEventListener('submit', (e) => {
+
+  $('#feedback-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const content = fbContent.value.trim();
     if (!content) { toast('请先写下反馈内容'); return; }
+    const contact = $('#fb-contact').value.trim();
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact);
+    const submitBtn = $('#fb-submit');
+    const okEl = $('#fb-ok');
+    const errEl = $('#fb-err');
+    okEl.hidden = true;
+    errEl.hidden = true;
+    submitBtn.disabled = true;
+    submitBtn.textContent = '正在发送…';
+
+    // 本地留存一份，防止网络异常丢失
     const list = store.get(KEY.feedback, []);
-    list.push({ content: content, contact: $('#fb-contact').value.trim(), at: new Date().toISOString() });
+    list.push({ content: content, contact: contact, at: new Date().toISOString() });
     store.set(KEY.feedback, list);
-    $('#fb-ok').hidden = false;
-    sfx.success();
-    setTimeout(() => {
-      $('#fb-ok').hidden = true;
-      e.target.reset();
-      $('#fb-count').textContent = '0';
-      closeModal('modal-feedback');
-    }, 1600);
+
+    const payload = {
+      _subject: '【behuman 网站反馈】' + new Date().toLocaleString('zh-CN'),
+      _captcha: 'false',
+      _template: 'table',
+      _honey: '',
+      name: contact || '匿名访客',
+      联系方式: contact || '未填写',
+      反馈内容: content,
+      提交时间: fmtDate(new Date().toISOString()),
+      来源页面: location.href,
+      浏览器: navigator.userAgent,
+      message: '反馈内容：\n' + content + '\n\n联系方式：' + (contact || '未填写') +
+        '\n提交时间：' + fmtDate(new Date().toISOString()) + '\n来源页面：' + location.href
+    };
+    if (isEmail) payload.email = contact;
+
+    let delivered = false;
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 15000);
+      const res = await fetch(FB_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: ctrl.signal
+      });
+      clearTimeout(timer);
+      delivered = res.ok;
+      if (!delivered) errEl.textContent = '发送失败（HTTP ' + res.status + '），内容已暂存在本机，请稍后再试。';
+    } catch (err) {
+      delivered = false;
+      errEl.textContent = '发送失败：当前网络无法连接邮件服务，内容已暂存在本机，请稍后再试。';
+    }
+
+    submitBtn.disabled = false;
+    submitBtn.textContent = '发送信号';
+    if (delivered) {
+      okEl.hidden = false;
+      sfx.success();
+      setTimeout(() => {
+        okEl.hidden = true;
+        e.target.reset();
+        $('#fb-count').textContent = '0';
+        closeModal('modal-feedback');
+      }, 1600);
+    } else {
+      errEl.hidden = false;
+    }
   });
 
   /* ---------------- 入口绑定 ---------------- */
