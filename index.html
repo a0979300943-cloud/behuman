@@ -6,7 +6,7 @@
 <title>behuman · 成为人类吧！</title>
 <meta name="description" content="behuman 是一款剧情化专注自习网站：帮助流落地球的外星人在变回原型时躲过人群，用每一次专注换取留在地球的资格。" />
 <link rel="icon" href="assets/avatar.svg" />
-<link rel="stylesheet" href="css/style.css" />
+<link rel="stylesheet" href="css/style.css?v=1.3" />
 </head>
 <body>
 
@@ -23,6 +23,7 @@
     <img id="intro-img" class="intro__img" src="" alt="" />
   </div>
   <div class="intro__vignette"></div>
+  <canvas id="intro-waves" class="intro__waves" width="1280" height="620" hidden></canvas>
   <div class="intro__topbar">
     <div class="intro__progress"><i id="intro-bar"></i></div>
   </div>
@@ -66,7 +67,6 @@
         </span>
         <span class="menu-item__text">
           <strong>开始专注</strong>
-          <small>警报响起，躲起来，撑过变身时间</small>
         </span>
         <span class="menu-item__arrow">›</span>
       </button>
@@ -81,7 +81,6 @@
         </span>
         <span class="menu-item__text">
           <strong>存档</strong>
-          <small>把地球生活的记忆写入三个星轨舱</small>
         </span>
         <span class="menu-item__arrow">›</span>
       </button>
@@ -96,7 +95,6 @@
         </span>
         <span class="menu-item__text">
           <strong>读档</strong>
-          <small>从星轨舱取回曾经的专注记录</small>
         </span>
         <span class="menu-item__arrow">›</span>
       </button>
@@ -146,6 +144,8 @@
 <div id="focus-running" class="focus-run" hidden>
   <img class="focus-run__bg" src="assets/scene5.svg" alt="" />
   <div class="focus-run__mask"></div>
+  <audio id="focus-audio" loop preload="auto"></audio>
+  <button id="focus-bgm" class="focus-bgm" type="button" title="背景音乐开关" hidden>🎵</button>
 
   <div class="focus-run__panel">
     <p class="focus-run__status" id="focus-status">正在屏住呼吸…</p>
@@ -236,6 +236,21 @@
 
     <div class="setting-row setting-row--column">
       <div>
+        <strong>导入专注音频</strong>
+        <small>专注期间循环播放的背景音乐，音频仅保存在本机浏览器中</small>
+      </div>
+      <div class="media-row">
+        <input type="file" id="set-audio-file" accept="audio/*" hidden />
+        <span class="media-name" id="set-audio-name">未导入 · 专注时无背景音乐</span>
+        <span class="media-actions">
+          <button class="btn-ghost btn-ghost--small" id="set-audio-btn" type="button">选择音频</button>
+          <button class="btn-ghost btn-ghost--small btn-danger" id="set-audio-clear" type="button" hidden>移除</button>
+        </span>
+      </div>
+    </div>
+
+    <div class="setting-row setting-row--column">
+      <div>
         <strong>开场剧情</strong>
         <small>重温外星人第一次接收到地球信号的故事</small>
       </div>
@@ -250,7 +265,7 @@
       <button class="btn-ghost btn-ghost--small btn-danger" id="set-clear" type="button">清空数据</button>
     </div>
 
-    <p class="modal__footer">behuman v1.0 · 愿你在地球上，藏得很好。</p>
+    <p class="modal__footer">behuman v1.1 · 愿你在地球上，藏得很好。</p>
   </div>
 </div>
 
@@ -269,8 +284,9 @@
       <label class="field-label" for="fb-contact">联系方式（选填）</label>
       <input id="fb-contact" type="text" maxlength="60" placeholder="邮箱 / 昵称，方便我们回复你" />
 
-      <button class="btn-primary" type="submit">发送信号</button>
-      <p class="form-ok" id="fb-ok" hidden>🪐 信号已送达母星，谢谢你的反馈！</p>
+      <button class="btn-primary" id="fb-submit" type="submit">发送信号</button>
+      <p class="form-ok" id="fb-ok" hidden>🪐 信号已送达，谢谢你的反馈！</p>
+      <p class="form-err" id="fb-err" hidden></p>
     </form>
   </div>
 </div>
@@ -278,7 +294,7 @@
 <!-- 全局轻提示 -->
 <div id="toast" class="toast" hidden></div>
 
-<script src="js/story.js"></script>
-<script src="js/app.js"></script>
+<script src="js/story.js?v=1.3"></script>
+<script src="js/app.js?v=1.3"></script>
 </body>
 </html>
