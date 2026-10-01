@@ -116,6 +116,29 @@ body.no-bgimg .space-bg { display: none; }
   to   { transform: scale(1.0) translate(0, 0); }
 }
 
+/* 「快乐」信号波形画面（大型信号监测仪） */
+.intro__waves {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  width: min(720px, 88vw);
+  height: auto;
+  border: 1px solid rgba(124, 232, 255, 0.28);
+  border-radius: 14px;
+  background: rgba(3, 8, 18, 0.82);
+  box-shadow:
+    0 0 0 6px rgba(3, 8, 18, 0.35),
+    0 24px 70px rgba(0, 0, 0, 0.6),
+    0 0 44px rgba(255, 158, 64, 0.12);
+}
+.intro__waves.show { animation: wavesIn 0.7s ease both; }
+@keyframes wavesIn {
+  from { opacity: 0; transform: translate(-50%, -46%) scale(0.96); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
 /* 图片生成中时的分镜渐变兜底 */
 .intro__media { background: #04060f; }
 .intro__media[data-scene="1"] {
@@ -716,6 +739,30 @@ body.no-bgimg .space-bg { display: none; }
 .switch input:checked + .switch__track { background: linear-gradient(120deg, #38b6d8, #6dd6f2); }
 .switch input:checked + .switch__track i { left: 23px; background: #fff; box-shadow: 0 0 10px rgba(124, 232, 255, 0.7); }
 
+/* 媒体导入行 */
+.media-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px dashed rgba(130, 200, 255, 0.28);
+  background: rgba(255, 255, 255, 0.03);
+}
+.media-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.media-actions { display: inline-flex; gap: 8px; flex: none; }
+
 /* 反馈表单 */
 .field-label { display: block; margin: 14px 0 8px; font-size: 13px; letter-spacing: 2px; color: var(--text-dim); }
 #feedback-form textarea,
@@ -736,6 +783,8 @@ body.no-bgimg .space-bg { display: none; }
 #feedback-form input:focus { border-color: rgba(124, 232, 255, 0.6); }
 .fb-count { text-align: right; font-size: 11.5px; color: var(--text-dim); margin-top: 6px; }
 .form-ok { margin-top: 14px; text-align: center; font-size: 13.5px; color: var(--gold); letter-spacing: 1px; }
+.form-err { margin-top: 14px; text-align: center; font-size: 12.5px; line-height: 1.8; color: var(--danger); letter-spacing: 0.5px; }
+.btn-primary:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
 
 /* 结算 */
 .result-emoji { text-align: center; font-size: 54px; margin: 10px 0 4px; animation: bob 2.4s ease-in-out infinite; }
@@ -864,6 +913,22 @@ body.no-focusimg .focus-run__bg { display: none; }
   animation: pulseText 1.2s ease-in-out infinite;
 }
 
+.focus-bgm {
+  position: absolute;
+  top: 22px;
+  right: 24px;
+  z-index: 5;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  font-size: 19px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(6px);
+  transition: all 0.25s ease;
+}
+.focus-bgm:hover { background: rgba(255, 255, 255, 0.85); transform: translateY(-1px); }
+
 .focus-warning {
   position: fixed;
   inset: 0;
@@ -945,6 +1010,9 @@ body.no-focusimg .focus-run__bg { display: none; }
   .modal { padding: 28px 20px 24px; }
   .stats > div { min-width: 104px; padding: 10px 14px; }
   .intro__skip { top: 40px; right: 16px; padding: 7px 13px; font-size: 13px; }
+  .intro__waves { top: 38%; width: 92vw; }
+  .media-row { flex-direction: column; align-items: stretch; }
+  .media-actions { justify-content: flex-end; }
   .slot { grid-template-columns: 58px 1fr; }
   .slot__action { grid-row: 2; grid-column: 2; justify-self: start; }
 }
