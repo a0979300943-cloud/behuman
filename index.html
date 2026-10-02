@@ -6,7 +6,7 @@
 <title>behuman · 成为人类吧！</title>
 <meta name="description" content="behuman 是一款剧情化专注自习网站：帮助流落地球的外星人在变回原型时躲过人群，用每一次专注换取留在地球的资格。" />
 <link rel="icon" href="assets/avatar.svg" />
-<link rel="stylesheet" href="css/style.css?v=1.3" />
+<link rel="stylesheet" href="css/style.css?v=2.13" />
 </head>
 <body>
 
@@ -119,6 +119,7 @@
     <h2 class="modal__title">伪装即将失效</h2>
     <p class="modal__desc">检测到拟态伪装开始不稳定。请立刻寻找一个无人的角落，<br/>在彻底变回原型之前保持专注，撑过这段时间。</p>
 
+    <p class="duration-label" id="focus-duration-label">本次躲藏时长</p>
     <div class="duration" id="duration-options">
       <button type="button" data-min="15"><strong>15</strong><small>分钟</small></button>
       <button type="button" data-min="25"><strong>25</strong><small>分钟</small></button>
@@ -129,6 +130,47 @@
       <label for="custom-min">自定义</label>
       <input id="custom-min" type="number" min="1" max="180" placeholder="1–180" />
       <span>分钟</span>
+    </div>
+
+    <div class="mode-block">
+      <p class="duration-label">专注方式</p>
+      <div class="seg" id="continuous-seg">
+        <button type="button" data-on="0" class="active">单次躲藏</button>
+        <button type="button" data-on="1">连续多轮</button>
+      </div>
+      <p class="seg-hint" id="continuous-hint">撑过这一轮就安全了。</p>
+    </div>
+
+    <div class="break-options" id="break-options" hidden>
+      <p class="duration-label">每轮休息时长</p>
+      <div class="duration" id="break-duration-options">
+        <button type="button" data-min="5"><strong>5</strong><small>分钟</small></button>
+        <button type="button" data-min="10" class="active"><strong>10</strong><small>分钟</small></button>
+        <button type="button" data-min="15"><strong>15</strong><small>分钟</small></button>
+        <button type="button" data-min="30"><strong>30</strong><small>分钟</small></button>
+      </div>
+      <div class="duration-custom">
+        <label for="break-custom-min">自定义</label>
+        <input id="break-custom-min" type="number" min="1" max="60" placeholder="1–60" />
+        <span>分钟</span>
+      </div>
+
+      <p class="duration-label">循环轮数</p>
+      <div class="duration" id="round-count-options">
+        <button type="button" data-rounds="2"><strong>2</strong><small>轮</small></button>
+        <button type="button" data-rounds="3" class="active"><strong>3</strong><small>轮</small></button>
+        <button type="button" data-rounds="5"><strong>5</strong><small>轮</small></button>
+        <button type="button" data-rounds="0"><strong>∞</strong><small>不限</small></button>
+      </div>
+      <div class="duration-custom">
+        <label for="round-custom">自定义</label>
+        <input id="round-custom" type="number" min="1" max="99" placeholder="1–99" />
+        <span>轮</span>
+      </div>
+      <ul class="tips">
+        <li>· 每轮躲藏结束后进入休息，休息倒计时结束会自动开始下一轮。</li>
+        <li>· 任何时候都可以在休息时提前开始或结束连续专注。</li>
+      </ul>
     </div>
 
     <ul class="tips">
@@ -149,10 +191,11 @@
 
   <div class="focus-run__panel">
     <p class="focus-run__status" id="focus-status">正在屏住呼吸…</p>
+    <p class="focus-run__round" id="focus-round" hidden></p>
     <div class="focus-run__timer" id="focus-timer">25:00</div>
-    <div class="focus-run__meter">
+    <div class="focus-run__meter" id="focus-meter">
       <div class="focus-run__meter-label">
-        <span>伪装稳定度</span>
+        <span id="focus-meter-label">伪装稳定度</span>
         <span id="focus-percent">100%</span>
       </div>
       <div class="focus-run__meter-bar"><i id="focus-bar"></i></div>
@@ -160,6 +203,14 @@
     <div class="focus-run__risk" id="focus-risk">
       <span>暴露风险</span>
       <i></i><i></i><i></i>
+    </div>
+    <div class="focus-run__break-tips" id="break-tips" hidden>
+      <p>😮‍💨 伪装暂时稳定，去地球人中间放松一下吧。</p>
+      <p>休息结束，将自动开始下一轮躲藏。</p>
+    </div>
+    <div class="focus-run__break-actions" id="break-actions" hidden>
+      <button id="break-skip" class="btn-primary" type="button">休息好了，立即开始</button>
+      <button id="break-end" class="btn-ghost" type="button">结束连续专注</button>
     </div>
     <button id="focus-abort" class="btn-ghost" type="button">放弃，现形</button>
   </div>
@@ -294,7 +345,7 @@
 <!-- 全局轻提示 -->
 <div id="toast" class="toast" hidden></div>
 
-<script src="js/story.js?v=1.3"></script>
-<script src="js/app.js?v=1.3"></script>
+<script src="js/story.js?v=2.14"></script>
+<script src="js/app.js?v=2.14"></script>
 </body>
 </html>
