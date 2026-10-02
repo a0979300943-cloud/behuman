@@ -182,6 +182,8 @@
     const m = $('#' + id);
     m.hidden = false;
     requestAnimationFrame(() => m.classList.add('show'));
+    // 兜底：页面在后台标签等情况下 rAF 可能不触发，确保弹窗最终显示
+    setTimeout(() => m.classList.add('show'), 60);
     sfx.select();
   }
   function closeModal(m) {
@@ -215,7 +217,7 @@
     startTime: 0,
     progressTimer: null,
 
-    lineMs(text) { return Math.min(7000, 2600 + text.length * 210); },
+    lineMs(text) { return Math.min(4200, 1500 + text.length * 120); },
 
     preload() {
       const loads = window.STORY.map(s => new Promise(resolve => {
@@ -244,9 +246,9 @@
       if (!this.started) return;
       this.el.classList.remove('is-loading');
 
-      // 总时长（含每场 0.9s 转场）
+      // 总时长（含每场 0.54s 转场）
       this.total = window.STORY.reduce((sum, s) =>
-        sum + s.lines.reduce((a, l) => a + this.lineMs(l), 0) + 900, 0);
+        sum + s.lines.reduce((a, l) => a + this.lineMs(l), 0) + 540, 0);
 
       this.startTime = performance.now();
       this.progressTimer = setInterval(() => {
@@ -278,7 +280,7 @@
           }
           this.img.style.opacity = '1';
           sfx.whoosh();
-        }, 450);
+        }, 260);
         this.runLine(si, 0);
       };
       this.timers.push(setTimeout(show, accDelay));
@@ -288,7 +290,7 @@
       const scene = window.STORY[si];
       if (li >= scene.lines.length) {
         // 下一场
-        this.timers.push(setTimeout(() => this.runScene(si + 1, 0), this.lineMs(scene.lines[scene.lines.length - 1]) + 500));
+        this.timers.push(setTimeout(() => this.runScene(si + 1, 0), this.lineMs(scene.lines[scene.lines.length - 1]) + 280));
         return;
       }
       const line = scene.lines[li];
@@ -421,15 +423,25 @@
     renderStats();
   }
 
-  /* ---------------- 开始专注 ---------------- */
+  /* ---------------- 开始专注 ----------------
+   * 相位状态机：phase = 'idle' | 'focus' | 'break'
+   * continuous 为 true 时：focus 成功 → break → 自动下一轮 focus，直到用户结束/失败
+   */
   const focus = {
     running: false,
+    phase: 'idle',
     totalMs: 0,
     endAt: 0,
     risk: 0,
     timer: null,
     hiddenAt: 0,
     minutes: 0,
+    continuous: false,
+    focusMin: 0,
+    breakMs: 10 * 60000,
+    round: 0,
+    totalRounds: 0,
+    cycleMinutes: 0,
     statuses: [
       '正在屏住呼吸…',
       '巷口有脚步声经过…',
@@ -446,7 +458,7 @@
 
   function startBgm() {
     media.get('audio').then(rec => {
-      if (!rec || !rec.blob || !focus.running) return;
+      if (focus.phase !== 'focus' || !rec || !rec.blob) return;
       const a = $('#focus-audio');
       focus.bgmURL = URL.createObjectURL(rec.blob);
       a.src = focus.bgmURL;
@@ -466,23 +478,21 @@
     if (focus.bgmURL) { URL.revokeObjectURL(focus.bgmURL); focus.bgmURL = null; }
   }
 
-  function initDurationUI() {
-    const btns = $$('#duration-options button');
-    const custom = $('#custom-min');
-    btns.forEach(b => b.addEventListener('click', () => {
-      btns.forEach(x => x.classList.remove('active'));
-      b.classList.add('active');
-      custom.value = '';
-      sfx.select();
-    }));
-    custom.addEventListener('input', () => {
-      if (custom.value) btns.forEach(x => x.classList.remove('active'));
-    });
-  }
   function resetDurationUI() {
     $$('#duration-options button').forEach(b =>
       b.classList.toggle('active', Number(b.dataset.min) === Number(settings.defaultMin)));
     $('#custom-min').value = '';
+    // 连续模式相关 UI 恢复默认：单次 + 休息 10 分钟
+    $$('#continuous-seg button').forEach(b => b.classList.toggle('active', b.dataset.on === '0'));
+    $('#break-options').hidden = true;
+    $('#focus-duration-label').textContent = '本次躲藏时长';
+    $('#continuous-hint').textContent = '撑过这一轮就安全了。';
+    $$('#break-duration-options button').forEach(b =>
+      b.classList.toggle('active', Number(b.dataset.min) === 10));
+    $('#break-custom-min').value = '';
+    $$('#round-count-options button').forEach(b =>
+      b.classList.toggle('active', Number(b.dataset.rounds) === 3));
+    $('#round-custom').value = '';
   }
 
   function chosenMinutes() {
@@ -495,12 +505,103 @@
     return active ? Number(active.dataset.min) : Number(settings.defaultMin);
   }
 
+  function chosenBreakMinutes() {
+    const el = $('#break-custom-min');
+    const custom = parseInt(el.value, 10);
+    if (el.value) {
+      if (isNaN(custom) || custom < 1 || custom > 60) return 0;
+      return custom;
+    }
+    const active = $('#break-duration-options button.active');
+    return active ? Number(active.dataset.min) : 10;
+  }
+
+  /* 循环轮数：0 = 不限（∞）；null = 自定义输入无效 */
+  function chosenRounds() {
+    const el = $('#round-custom');
+    const custom = parseInt(el.value, 10);
+    if (el.value) {
+      if (isNaN(custom) || custom < 1 || custom > 99) return null;
+      return custom;
+    }
+    const active = $('#round-count-options button.active');
+    return active ? Number(active.dataset.rounds) : 3;
+  }
+
+  function updateContHint() {
+    const r = chosenRounds();
+    $('#continuous-hint').textContent = (r === 0)
+      ? '一轮躲藏 + 一段休息，自动循环，直到你主动结束。'
+      : '一轮躲藏 + 一段休息，自动循环 ' + r + ' 轮。';
+  }
+
+  function initDurationUI() {
+    const bindGroup = (groupId, customId) => {
+      const btns = $$('#' + groupId + ' button');
+      const custom = $('#' + customId);
+      btns.forEach(b => b.addEventListener('click', () => {
+        btns.forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        custom.value = '';
+        sfx.select();
+      }));
+      custom.addEventListener('input', () => {
+        if (custom.value) btns.forEach(x => x.classList.remove('active'));
+      });
+    };
+    bindGroup('duration-options', 'custom-min');
+    bindGroup('break-duration-options', 'break-custom-min');
+    bindGroup('round-count-options', 'round-custom');
+
+    // 轮数变化时刷新提示文案（仅在连续模式下）
+    const refreshRoundHint = () => {
+      if ($('#continuous-seg button.active').dataset.on === '1') updateContHint();
+    };
+    $$('#round-count-options button').forEach(b => b.addEventListener('click', refreshRoundHint));
+    $('#round-custom').addEventListener('input', refreshRoundHint);
+
+    // 单次 / 连续 切换
+    $$('#continuous-seg button').forEach(b => b.addEventListener('click', () => {
+      $$('#continuous-seg button').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      const cont = b.dataset.on === '1';
+      $('#break-options').hidden = !cont;
+      $('#focus-duration-label').textContent = cont ? '每轮专注时长' : '本次躲藏时长';
+      if (cont) updateContHint();
+      else $('#continuous-hint').textContent = '撑过这一轮就安全了。';
+      sfx.select();
+    }));
+  }
+
   function startFocus() {
     const min = chosenMinutes();
     if (!min) { toast('请输入 1–180 之间的分钟数'); return; }
+    const cont = $('#continuous-seg button.active').dataset.on === '1';
+    let breakMin = 10;
+    let totalRounds = 0;
+    if (cont) {
+      breakMin = chosenBreakMinutes();
+      if (!breakMin) { toast('请输入 1–60 之间的休息分钟数'); return; }
+      const r = chosenRounds();
+      if (r === null) { toast('请输入 1–99 之间的循环轮数'); return; }
+      totalRounds = r;
+    }
 
     closeModal('focus-setup');
+    focus.continuous = cont;
+    focus.focusMin = min;
+    focus.breakMs = breakMin * 60000;
+    focus.totalRounds = cont && totalRounds > 0 ? totalRounds : Infinity;
+    focus.round = 0;
+    focus.cycleMinutes = 0;
+    beginFocusRound(min);
+  }
+
+  function beginFocusRound(min) {
+    focus.phase = 'focus';
     focus.running = true;
+    focus.round += 1;
+    $('#focus-warning').hidden = true;
     focus.minutes = min;
     focus.totalMs = min * 60000;
     focus.endAt = Date.now() + focus.totalMs;
@@ -508,18 +609,31 @@
     focus.hiddenAt = 0;
     focus.statusIdx = 0;
 
-    $('#focus-running').hidden = false;
-    requestAnimationFrame(() => $('#focus-running').classList.add('show'));
+    const run = $('#focus-running');
+    run.hidden = false;
+    run.classList.remove('is-break');
+    requestAnimationFrame(() => run.classList.add('show'));
+
+    $('#focus-status').hidden = false;
+    $('#focus-status').textContent = focus.statuses[0];
+    $('#focus-round').hidden = !focus.continuous;
+    $('#focus-round').textContent = '第 ' + focus.round + ' 轮躲藏';
     $('#focus-timer').textContent = fmtTime(focus.totalMs);
+    $('#focus-meter').hidden = false;
+    $('#focus-meter-label').textContent = '伪装稳定度';
     $('#focus-percent').textContent = '100%';
     $('#focus-bar').style.width = '100%';
-    $('#focus-status').textContent = focus.statuses[0];
+    $('#focus-risk').hidden = false;
+    $('#break-tips').hidden = true;
+    $('#break-actions').hidden = true;
+    $('#focus-abort').hidden = false;
     renderRisk();
     sfx.alarm();
     document.title = '🛸 专注中 ' + fmtTime(focus.totalMs) + ' · behuman';
 
     clearInterval(focus.timer);
     focus.timer = setInterval(tick, 250);
+    clearInterval(focus.statusTimer);
     focus.statusTimer = setInterval(() => {
       focus.statusIdx = (focus.statusIdx + 1) % focus.statuses.length;
       $('#focus-status').textContent = focus.statuses[focus.statusIdx];
@@ -528,88 +642,161 @@
     startBgm();
   }
 
+  function beginBreak() {
+    focus.phase = 'break';
+    focus.totalMs = focus.breakMs;
+    focus.endAt = Date.now() + focus.breakMs;
+    $('#focus-warning').hidden = true;
+
+    const run = $('#focus-running');
+    run.classList.add('is-break');
+    $('#focus-status').textContent = '伪装暂时稳定 · 休息时间';
+    $('#focus-round').textContent = '第 ' + focus.round + ' 轮躲藏完成';
+    $('#focus-meter-label').textContent = '休息剩余';
+    $('#focus-bar').style.width = '100%';
+    $('#focus-percent').textContent = '100%';
+    $('#focus-risk').hidden = true;
+    $('#break-tips').hidden = false;
+    $('#break-actions').hidden = false;
+    $('#focus-abort').hidden = true;
+    document.title = '☕ 休息中 ' + fmtTime(focus.breakMs) + ' · behuman';
+    sfx.select();
+  }
+
   function tick() {
     const remain = focus.endAt - Date.now();
     $('#focus-timer').textContent = fmtTime(remain);
     const pct = Math.max(0, remain / focus.totalMs);
     $('#focus-bar').style.width = (pct * 100).toFixed(1) + '%';
     $('#focus-percent').textContent = Math.round(pct * 100) + '%';
-    document.title = '🛸 专注中 ' + fmtTime(remain) + ' · behuman';
-    if (remain <= 0) endFocus(true);
+
+    if (focus.phase === 'focus') {
+      document.title = '🛸 专注中 ' + fmtTime(remain) + ' · behuman';
+      if (remain <= 0) completeFocusRound();
+    } else {
+      document.title = '☕ 休息中 ' + fmtTime(remain) + ' · behuman';
+      if (remain <= 0) {
+        // 休息结束，警报再次响起，自动进入下一轮
+        beginFocusRound(focus.focusMin);
+      }
+    }
   }
 
   function renderRisk() {
     $$('#focus-risk i').forEach((dot, i) => dot.classList.toggle('on', i < focus.risk));
   }
 
+  /* 一轮专注成功：记账；连续模式进入休息，单次模式收尾弹窗 */
+  function completeFocusRound() {
+    const min = focus.minutes;
+    state.sessions = (state.sessions || 0) + 1;
+    const t = today();
+    if (state.days.indexOf(t) === -1) state.days.push(t);
+    state.totalMinutes += min;
+    state.success = (state.success || 0) + 1;
+    state.longestMinutes = Math.max(state.longestMinutes || 0, min);
+    focus.cycleMinutes += min;
+    saveState();
+    renderStats();
+    sfx.success();
+
+    clearInterval(focus.statusTimer);
+    stopBgm();
+    if (focus.continuous) {
+      // 已完成设定轮数：直接结算，不再进入休息
+      if (focus.round >= focus.totalRounds) { endFocus(true); return; }
+      beginBreak();
+    } else {
+      endFocus(true);
+    }
+  }
+
   function endFocus(success, aborted) {
     if (!focus.running) return;
+    const wasContinuous = focus.continuous;
+    const cycleRounds = focus.round;
+    const cycleMins = focus.cycleMinutes;
     focus.running = false;
+    focus.phase = 'idle';
     clearInterval(focus.timer);
     clearInterval(focus.statusTimer);
     stopBgm();
     document.title = 'behuman · 成为人类吧！';
 
     const run = $('#focus-running');
-    run.classList.remove('show');
+    run.classList.remove('show', 'is-break');
     setTimeout(() => { run.hidden = true; }, 300);
 
-    state.sessions = (state.sessions || 0) + 1;
-    const t = today();
-    if (state.days.indexOf(t) === -1) state.days.push(t);
-
-    if (success) {
-      const min = focus.minutes;
-      state.totalMinutes += min;
-      state.success = (state.success || 0) + 1;
-      state.longestMinutes = Math.max(state.longestMinutes || 0, min);
-      saveState();
-      sfx.success();
-      showResult(true, min);
-    } else {
+    if (!success) {
       state.failed = (state.failed || 0) + 1;
       saveState();
       sfx.fail();
-      showResult(false, 0, aborted);
     }
     renderStats();
+    showResult(success, success ? (wasContinuous ? cycleMins : focus.minutes) : 0, aborted,
+      { continuous: wasContinuous, rounds: cycleRounds, cycleMins: cycleMins });
+
+    // 重置连续序列
+    focus.continuous = false;
+    focus.round = 0;
+    focus.totalRounds = 0;
+    focus.cycleMinutes = 0;
+    focus.focusMin = 0;
   }
 
-  function showResult(ok, minutes, aborted) {
+  function showResult(ok, minutes, aborted, extra) {
     const title = $('#result-title');
     const emoji = $('#result-emoji');
     const text = $('#result-text');
     const grid = $('#result-grid');
+    const cont = extra && extra.continuous;
 
     if (ok) {
-      title.textContent = '暂时安全了';
-      emoji.textContent = '🛸';
-      const praises = [
-        '你完美地屏住了呼吸，没有一个人类发现异常。',
-        '伪装重新稳定下来——今天，你又是一个「普通人类」了。',
-        '好险！人群散去，你成功撑过了这次变身。'
-      ];
-      text.textContent = praises[Math.floor(Math.random() * praises.length)];
-      grid.innerHTML =
-        '<div><strong>' + minutes + ' 分钟</strong><small>本次躲藏</small></div>' +
-        '<div><strong>' + (state.totalMinutes || 0) + ' 分钟</strong><small>累计居留</small></div>' +
-        '<div><strong>' + (state.success || 0) + ' 次</strong><small>成功次数</small></div>';
+      if (cont) {
+        title.textContent = '连续躲藏结束';
+        emoji.textContent = '🌍';
+        text.textContent = '你在人群中藏了一轮又一轮，这些屏住呼吸的时间，都换成了留在地球的资格。';
+        grid.innerHTML =
+          '<div><strong>' + extra.rounds + ' 轮</strong><small>本次连续</small></div>' +
+          '<div><strong>' + minutes + ' 分钟</strong><small>本次躲藏合计</small></div>' +
+          '<div><strong>' + (state.totalMinutes || 0) + ' 分钟</strong><small>累计居留</small></div>';
+      } else {
+        title.textContent = '暂时安全了';
+        emoji.textContent = '🛸';
+        const praises = [
+          '你完美地屏住了呼吸，没有一个人类发现异常。',
+          '伪装重新稳定下来——今天，你又是一个「普通人类」了。',
+          '好险！人群散去，你成功撑过了这次变身。'
+        ];
+        text.textContent = praises[Math.floor(Math.random() * praises.length)];
+        grid.innerHTML =
+          '<div><strong>' + minutes + ' 分钟</strong><small>本次躲藏</small></div>' +
+          '<div><strong>' + (state.totalMinutes || 0) + ' 分钟</strong><small>累计居留</small></div>' +
+          '<div><strong>' + (state.success || 0) + ' 次</strong><small>成功次数</small></div>';
+      }
     } else {
       title.textContent = aborted ? '你选择了现形' : '被发现了！';
       emoji.textContent = aborted ? '🌫️' : '👁️';
       text.textContent = aborted
-        ? '你提前离开了躲藏点，伪装在人群面前消散……这次不会计入居留时长，下一次藏久一点。'
+        ? '你提前离开了躲藏点，伪装在人群面前消散……这一轮不会计入居留时长，下一次藏久一点。'
         : '你离开页面的时间太久，被路过的人类看到了原型！本次专注失败，深呼吸，再来一次。';
-      grid.innerHTML =
-        '<div><strong>0 分钟</strong><small>本次居留</small></div>' +
-        '<div><strong>' + (state.failed || 0) + ' 次</strong><small>暴露次数</small></div>' +
-        '<div><strong>' + (state.success || 0) + ' 次</strong><small>成功次数</small></div>';
+      if (cont) {
+        grid.innerHTML =
+          '<div><strong>' + extra.cycleMins + ' 分钟</strong><small>此前轮次已居留</small></div>' +
+          '<div><strong>' + Math.max(0, extra.rounds - 1) + ' 轮</strong><small>已完成轮数</small></div>' +
+          '<div><strong>' + (state.failed || 0) + ' 次</strong><small>暴露次数</small></div>';
+      } else {
+        grid.innerHTML =
+          '<div><strong>0 分钟</strong><small>本次居留</small></div>' +
+          '<div><strong>' + (state.failed || 0) + ' 次</strong><small>暴露次数</small></div>' +
+          '<div><strong>' + (state.success || 0) + ' 次</strong><small>成功次数</small></div>';
+      }
     }
     openModal('focus-result');
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (!focus.running) return;
+    if (!focus.running || focus.phase !== 'focus') return;
     if (document.hidden) {
       focus.hiddenAt = Date.now();
     } else if (focus.hiddenAt) {
@@ -638,8 +825,25 @@
   });
 
   $('#focus-abort').addEventListener('click', () => {
-    if (confirm('提前现形意味着本次专注失败，且不计入居留时长。确定放弃吗？')) {
+    const msg = focus.continuous
+      ? '提前现形将结束本次连续专注，当前这一轮不计入居留时长（已完成 ' +
+        Math.max(0, focus.round - 1) + ' 轮）。确定放弃吗？'
+      : '提前现形意味着本次专注失败，且不计入居留时长。确定放弃吗？';
+    if (confirm(msg)) {
       endFocus(false, true);
+    }
+  });
+
+  $('#break-skip').addEventListener('click', () => {
+    if (focus.phase !== 'break') return;
+    sfx.select();
+    beginFocusRound(focus.focusMin);
+  });
+
+  $('#break-end').addEventListener('click', () => {
+    if (focus.phase !== 'break') return;
+    if (confirm('已完成 ' + focus.round + ' 轮躲藏，确定结束本次连续专注吗？')) {
+      endFocus(true);
     }
   });
 
