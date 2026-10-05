@@ -917,6 +917,33 @@ body.no-bgimg .space-bg { display: none; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.bili-input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(4, 8, 20, 0.7);
+  color: var(--text);
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+.bili-input::placeholder { color: rgba(147, 166, 200, 0.5); }
+.bili-input:focus { border-color: rgba(124, 232, 255, 0.6); }
+/* B站背景音乐：隐藏但保持渲染（1px 容器 + 大尺寸 iframe，保证音频能播） */
+.focus-bili {
+  position: fixed;
+  left: -20px;
+  top: -20px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+.focus-bili iframe { width: 320px; height: 200px; border: 0; }
 .media-actions { display: inline-flex; gap: 8px; flex: none; }
 
 /* 反馈表单 */
