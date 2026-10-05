@@ -108,6 +108,16 @@
     return (bytes / 1024 / 1024).toFixed(1) + ' MB';
   }
 
+  /* ---------------- B站视频链接解析 ---------------- */
+  function parseBiliId(raw) {
+    const s = String(raw || '').trim();
+    let m = s.match(/BV[0-9A-Za-z]{10}/);
+    if (m) return { t: 'bv', id: m[0] };
+    m = s.match(/[aA][vV](\d{2,15})/);
+    if (m) return { t: 'aid', id: m[1] };
+    return null;
+  }
+
   const freshState = () => ({
     totalMinutes: 0,
     sessions: 0,
@@ -566,10 +576,34 @@
       '就快了，警报即将解除…'
     ],
     statusIdx: 0,
-    bgmURL: null
+    bgmURL: null,
+    bgmMode: ''
   };
 
+  /* B站背景音乐：专注开始后注入隐藏 iframe，只听声音不显示画面 */
+  function biliBgmInject() {
+    const parsed = parseBiliId(settings.biliBgm);
+    if (!parsed) return;
+    const box = $('#focus-bili');
+    box.innerHTML = '';
+    const f = document.createElement('iframe');
+    f.src = 'https://player.bilibili.com/player.html?' +
+      (parsed.t === 'bv' ? 'bvid=' + parsed.id : 'aid=' + parsed.id) +
+      '&autoplay=1&mute=0&danmaku=0';
+    f.setAttribute('frameborder', '0');
+    f.setAttribute('scrolling', 'no');
+    f.setAttribute('allow', 'autoplay; encrypted-media');
+    box.appendChild(f);
+    focus.bgmMode = 'bili';
+  }
+
   function startBgm() {
+    if (parseBiliId(settings.biliBgm)) {
+      biliBgmInject();
+      $('#focus-bgm').textContent = '🎵';
+      $('#focus-bgm').hidden = false;
+      return;
+    }
     media.get('audio').then(rec => {
       if (focus.phase !== 'focus' || !rec || !rec.blob) return;
       const a = $('#focus-audio');
@@ -587,6 +621,8 @@
     a.pause();
     a.removeAttribute('src');
     try { a.load(); } catch (e) {}
+    $('#focus-bili').innerHTML = '';
+    focus.bgmMode = '';
     $('#focus-bgm').hidden = true;
     if (focus.bgmURL) { URL.revokeObjectURL(focus.bgmURL); focus.bgmURL = null; }
   }
@@ -961,6 +997,17 @@
   });
 
   $('#focus-bgm').addEventListener('click', () => {
+    if (focus.bgmMode === 'bili') {
+      const box = $('#focus-bili');
+      if (box.firstChild) {
+        box.innerHTML = '';
+        $('#focus-bgm').textContent = '🔇';
+      } else {
+        biliBgmInject();
+        $('#focus-bgm').textContent = '🎵';
+      }
+      return;
+    }
     const a = $('#focus-audio');
     if (a.paused) {
       a.muted = false;
@@ -1038,6 +1085,8 @@
   function syncSettingsUI() {
     $('#set-default-min').value = String(settings.defaultMin);
     $('#set-sound').checked = !!settings.sound;
+    $('#set-bili-bgm').value = settings.biliBgm || '';
+    $('#set-bili-bgm-clear').hidden = !settings.biliBgm;
     syncMediaUI();
   }
 
@@ -1082,6 +1131,25 @@
     });
   }
   bindMediaImport('set-audio-btn', 'set-audio-file', 'set-audio-clear', 'audio', 100);
+
+  /* ---------------- B站背景音乐设置 ---------------- */
+  $('#set-bili-bgm-save').addEventListener('click', () => {
+    const raw = $('#set-bili-bgm').value.trim();
+    if (!parseBiliId(raw)) { toast('没识别出 BV 号或 av 号，请检查链接'); return; }
+    settings.biliBgm = raw;
+    saveSettings();
+    $('#set-bili-bgm-clear').hidden = false;
+    sfx.select();
+    toast('已保存，专注时将后台播放该视频声音');
+  });
+  $('#set-bili-bgm-clear').addEventListener('click', () => {
+    settings.biliBgm = '';
+    saveSettings();
+    $('#set-bili-bgm').value = '';
+    $('#set-bili-bgm-clear').hidden = true;
+    sfx.select();
+    toast('已移除，恢复本地音频或静音');
+  });
   $('#set-default-min').addEventListener('change', (e) => {
     settings.defaultMin = Number(e.target.value);
     saveSettings();
