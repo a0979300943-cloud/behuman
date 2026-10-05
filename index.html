@@ -6,7 +6,7 @@
 <title>behuman · 成为人类吧！</title>
 <meta name="description" content="behuman 是一款剧情化专注自习网站：帮助流落地球的外星人在变回原型时躲过人群，用每一次专注换取留在地球的资格。" />
 <link rel="icon" href="assets/avatar.svg" />
-<link rel="stylesheet" href="css/style.css?v=2.19" />
+<link rel="stylesheet" href="css/style.css?v=2.22" />
 </head>
 <body>
 
@@ -201,6 +201,7 @@
   <img class="focus-run__bg" src="assets/scene5.svg" alt="" />
   <div class="focus-run__mask"></div>
   <audio id="focus-audio" loop preload="auto"></audio>
+    <div id="focus-bili" class="focus-bili" aria-hidden="true"></div>
   <button id="focus-bgm" class="focus-bgm" type="button" title="背景音乐开关" hidden>🎵</button>
 
   <div class="focus-run__panel">
@@ -316,6 +317,20 @@
 
     <div class="setting-row setting-row--column">
       <div>
+        <strong>B站背景音乐</strong>
+        <small>粘贴B站视频链接（BV 号）到下方文本框内，开始专注后后台播放该视频的声音（不显示画面）；填写后优先于本地导入音频。单曲结束不自动循环</small>
+      </div>
+      <div class="media-row">
+        <input type="text" id="set-bili-bgm" class="bili-input" placeholder="https://www.bilibili.com/video/BV…" maxlength="120" />
+        <span class="media-actions">
+          <button class="btn-ghost btn-ghost--small" id="set-bili-bgm-save" type="button">保存</button>
+          <button class="btn-ghost btn-ghost--small btn-danger" id="set-bili-bgm-clear" type="button" hidden>移除</button>
+        </span>
+      </div>
+    </div>
+
+    <div class="setting-row setting-row--column">
+      <div>
         <strong>开场剧情</strong>
         <small>重温外星人第一次接收到地球信号的故事</small>
       </div>
@@ -391,7 +406,7 @@
 <!-- 全局轻提示 -->
 <div id="toast" class="toast" hidden></div>
 
-<script src="js/story.js?v=2.19"></script>
-<script src="js/app.js?v=2.19"></script>
+<script src="js/story.js?v=2.22"></script>
+<script src="js/app.js?v=2.22"></script>
 </body>
 </html>
