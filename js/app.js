@@ -9,17 +9,28 @@
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
 
+  /* ---------------- 账号会话（纯本地账号，见下方 account 模块） ----------------
+   * accountName 为空 = 游客（沿用 bh.xxx 键）；
+   * 登录后数据键自动变为 bh.u.<代号>.xxx，不同账号数据完全隔离。
+   * 账号表 bh.accounts / 会话 bh.session 为全局键，不随前缀变化。 */
+  const SESSION_KEY = 'bh.session';
+  const ACCOUNTS_KEY = 'bh.accounts';
+  let accountName = (function () {
+    try { return localStorage.getItem(SESSION_KEY) || ''; } catch (e) { return ''; }
+  })();
+  const keyFor = (k) => (!accountName ? k : k.replace(/^bh\./, 'bh.u.' + accountName + '.'));
+
   const store = {
     get(k, d) {
       try {
-        const raw = localStorage.getItem(k);
+        const raw = localStorage.getItem(keyFor(k));
         return raw == null ? d : JSON.parse(raw);
       } catch (e) { return d; }
     },
     set(k, v) {
-      try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {}
+      try { localStorage.setItem(keyFor(k), JSON.stringify(v)); } catch (e) {}
     },
-    remove(k) { try { localStorage.removeItem(k); } catch (e) {} }
+    remove(k) { try { localStorage.removeItem(keyFor(k)); } catch (e) {} }
   };
 
   const KEY = {
@@ -30,7 +41,9 @@
     feedback: 'bh.feedback'
   };
 
-  /* ---------------- 媒体文件存储（IndexedDB，存 Blob，容量大） ---------------- */
+  /* ---------------- 媒体文件存储（IndexedDB，存 Blob，容量大） ----------------
+   * 键名随账号隔离：游客 audio / 账号 <代号>:audio */
+  const mkey = (k) => (accountName ? accountName + ':' + k : k);
   const media = {
     DB_NAME: 'bh-media',
     STORE: 'files',
@@ -63,11 +76,31 @@
       return this.tx('readwrite', s => s.put({
         blob: file, name: file.name, type: file.type,
         size: file.size, addedAt: new Date().toISOString()
-      }, key));
+      }, mkey(key)));
     },
-    get(key) { return this.tx('readonly', s => s.get(key)).then(r => r || null).catch(() => null); },
-    del(key) { return this.tx('readwrite', s => s.delete(key)).catch(() => {}); },
-    clear() { return this.tx('readwrite', s => s.clear()).catch(() => {}); }
+    get(key) { return this.tx('readonly', s => s.get(mkey(key))).then(r => r || null).catch(() => null); },
+    del(key) { return this.tx('readwrite', s => s.delete(mkey(key))).catch(() => {}); },
+    /* 只清当前身份（游客键不含冒号；账号键为 "<代号>:" 前缀），不动其他账号 */
+    async clear() {
+      try {
+        const d = await this.db();
+        await new Promise((resolve) => {
+          const t = d.transaction(this.STORE, 'readwrite');
+          const s = t.objectStore(this.STORE);
+          const req = s.getAllKeys();
+          req.onsuccess = () => {
+            (req.result || []).forEach(k => {
+              const ks = String(k);
+              const mine = accountName ? ks.startsWith(accountName + ':') : (ks.indexOf(':') === -1);
+              if (mine) s.delete(k);
+            });
+          };
+          t.oncomplete = () => resolve();
+          t.onerror = () => resolve();
+          t.onabort = () => resolve();
+        });
+      } catch (e) {}
+    }
   };
   function fmtSize(bytes) {
     if (!bytes && bytes !== 0) return '';
@@ -91,6 +124,86 @@
   const saveState = () => store.set(KEY.state, state);
   const saveSettings = () => store.set(KEY.settings, settings);
   const saveSlots = () => store.set(KEY.slots, slots);
+
+  /* ---------------- 账号模块（纯本地，无后端） ----------------
+   * 账号表：bh.accounts = { 代号: { salt, hash, createdAt } }
+   * 密码以 SHA-256(salt + 密码) 存储，不存明文；仅防本机直接窥视，非服务器级安全 */
+  function loadAccounts() {
+    try { return JSON.parse(localStorage.getItem(ACCOUNTS_KEY)) || {}; }
+    catch (e) { return {}; }
+  }
+  function saveAccounts(a) {
+    try { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(a)); } catch (e) {}
+  }
+  function randomSalt() {
+    const arr = new Uint8Array(12);
+    window.crypto.getRandomValues(arr);
+    return Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
+  }
+  async function hashPwd(salt, pwd) {
+    const data = new TextEncoder().encode('bh::' + salt + '::' + pwd);
+    const buf = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  /* 注册时把游客的文本数据复制到新账号空间（无缝继承本机旧记录） */
+  function copyGuestDataToAccount(user) {
+    Object.keys(KEY).forEach(k => {
+      try {
+        const raw = localStorage.getItem(KEY[k]);
+        if (raw != null) localStorage.setItem('bh.u.' + user + '.' + k, raw);
+      } catch (e) {}
+    });
+  }
+
+  /* 切换身份后重新载入内存数据并刷新界面 */
+  function afterAccountChanged() {
+    state = Object.assign(freshState(), store.get(KEY.state, {}));
+    settings = Object.assign({ defaultMin: 25, sound: true }, store.get(KEY.settings, {}));
+    slots = store.get(KEY.slots, { 1: null, 2: null, 3: null });
+    renderStats();
+    if (typeof syncSettingsUI === 'function') syncSettingsUI();
+    renderAccountUI();
+  }
+  function renderAccountUI() {
+    $('#account-label').textContent = accountName || '登录/注册';
+    $('#account-menu-name').textContent = accountName ? ('当前身份：' + accountName) : '';
+    $('#btn-logout').hidden = !accountName;
+  }
+
+  async function accountRegister(name, pwd) {
+    const accounts = loadAccounts();
+    if (accounts[name]) return { ok: false, msg: '该身份代号已被注册，换一个吧' };
+    const guestAudio = accountName ? null : await media.get('audio');
+    const salt = randomSalt();
+    const hash = await hashPwd(salt, pwd);
+    copyGuestDataToAccount(name);
+    accounts[name] = { salt: salt, hash: hash, createdAt: new Date().toISOString() };
+    saveAccounts(accounts);
+    try { localStorage.setItem(SESSION_KEY, name); } catch (e) {}
+    accountName = name;
+    if (guestAudio && guestAudio.blob) await media.put('audio', guestAudio.blob);
+    afterAccountChanged();
+    return { ok: true };
+  }
+
+  async function accountLogin(name, pwd) {
+    const accounts = loadAccounts();
+    const rec = accounts[name];
+    if (!rec) return { ok: false, msg: '没有找到这个身份代号' };
+    const hash = await hashPwd(rec.salt, pwd);
+    if (hash !== rec.hash) return { ok: false, msg: '密码不正确，请重试' };
+    try { localStorage.setItem(SESSION_KEY, name); } catch (e) {}
+    accountName = name;
+    afterAccountChanged();
+    return { ok: true };
+  }
+
+  function accountLogout() {
+    try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+    accountName = '';
+    afterAccountChanged();
+  }
 
   function fmtTime(ms) {
     const total = Math.max(0, Math.ceil(ms / 1000));
@@ -990,7 +1103,8 @@
     intro.play();
   });
   $('#set-clear').addEventListener('click', () => {
-    if (!confirm('将清空全部专注记录、三个舱位存档与设置，且无法恢复。确定吗？')) return;
+    const who = accountName ? '当前账号（' + accountName + '）的' : '本机的';
+    if (!confirm('将清空' + who + '全部专注记录、三个舱位存档与设置，且无法恢复。确定吗？')) return;
     if (!confirm('真的要让外星人忘记在地球上的一切吗？')) return;
     Object.keys(KEY).forEach(k => store.remove(KEY[k]));
     media.clear();
@@ -1084,9 +1198,74 @@
   $('#btn-settings').addEventListener('click', () => { syncSettingsUI(); openModal('modal-settings'); });
   $('#btn-feedback').addEventListener('click', () => openModal('modal-feedback'));
 
+  /* ---------------- 登录 / 注册 ---------------- */
+  let authMode = 'login';
+  function setAuthMode(mode) {
+    authMode = mode;
+    $('#auth-tab-login').classList.toggle('active', mode === 'login');
+    $('#auth-tab-register').classList.toggle('active', mode === 'register');
+    $('#auth-pwd2-field').hidden = mode !== 'register';
+    $('#auth-submit').textContent = mode === 'login' ? '登录' : '注册并进入';
+    $('#auth-err').hidden = true;
+  }
+  $('#auth-tab-login').addEventListener('click', () => { setAuthMode('login'); sfx.select(); });
+  $('#auth-tab-register').addEventListener('click', () => { setAuthMode('register'); sfx.select(); });
+
+  $('#btn-account').addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (accountName) {
+      $('#account-menu').hidden = !$('#account-menu').hidden;
+    } else {
+      setAuthMode('login');
+      $('#auth-name').value = '';
+      $('#auth-pwd').value = '';
+      $('#auth-pwd2').value = '';
+      $('#auth-err').hidden = true;
+      openModal('modal-auth');
+      setTimeout(() => $('#auth-name').focus(), 300);
+    }
+  });
+  document.addEventListener('click', (e) => {
+    const menu = $('#account-menu');
+    if (!menu.hidden && !e.target.closest('#account-menu') && !e.target.closest('#btn-account')) {
+      menu.hidden = true;
+    }
+  });
+  $('#btn-logout').addEventListener('click', () => {
+    accountLogout();
+    $('#account-menu').hidden = true;
+    sfx.select();
+    toast('已退出登录，回到游客身份');
+  });
+
+  $('#auth-submit').addEventListener('click', async () => {
+    const name = $('#auth-name').value.trim();
+    const pwd = $('#auth-pwd').value;
+    const pwd2 = $('#auth-pwd2').value;
+    const errEl = $('#auth-err');
+    const showErr = (m) => { errEl.textContent = m; errEl.hidden = false; };
+    if (!/^[一-龥A-Za-z0-9_]{2,12}$/.test(name)) { showErr('身份代号需为 2–12 位中英文、数字或下划线'); return; }
+    if (pwd.length < 6) { showErr('密码至少 6 位'); return; }
+    if (authMode === 'register' && pwd2 !== pwd) { showErr('两次输入的密码不一致'); return; }
+    const btn = $('#auth-submit');
+    btn.disabled = true;
+    btn.textContent = '正在验证…';
+    const res = authMode === 'login' ? await accountLogin(name, pwd) : await accountRegister(name, pwd);
+    btn.disabled = false;
+    if (res.ok) {
+      closeModal('modal-auth');
+      sfx.success();
+      toast(authMode === 'login' ? ('欢迎回到地球，' + name) : ('注册成功，已以「' + name + '」的身份进入'));
+    } else {
+      btn.textContent = authMode === 'login' ? '登录' : '注册并进入';
+      showErr(res.msg);
+    }
+  });
+
   /* ---------------- 启动 ---------------- */
   buildStars();
   syncSettingsUI();
+  renderAccountUI();
   initDurationUI();
 
   if (store.get(KEY.intro, {}).watched) {
