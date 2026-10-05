@@ -6,7 +6,7 @@
 <title>behuman · 成为人类吧！</title>
 <meta name="description" content="behuman 是一款剧情化专注自习网站：帮助流落地球的外星人在变回原型时躲过人群，用每一次专注换取留在地球的资格。" />
 <link rel="icon" href="assets/avatar.svg" />
-<link rel="stylesheet" href="css/style.css?v=2.13" />
+<link rel="stylesheet" href="css/style.css?v=2.19" />
 </head>
 <body>
 
@@ -44,13 +44,19 @@
       <img src="assets/avatar.svg" alt="behuman" />
       <span>behuman</span>
     </div>
-    <button id="btn-settings" class="icon-btn" type="button" title="设置" aria-label="设置">
-      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-        <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 15a3 3 0 100-6 3 3 0 000 6z"/>
-        <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.7 1.7 0 00.34 1.87l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.7 1.7 0 00-1.87-.34 1.7 1.7 0 00-1.03 1.56V21a2 2 0 11-4 0v-.09A1.7 1.7 0 009 19.35a1.7 1.7 0 00-1.87.34l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.7 1.7 0 00.34-1.87 1.7 1.7 0 00-1.56-1.03H3a2 2 0 110-4h.09A1.7 1.7 0 004.65 9a1.7 1.7 0 00-.34-1.87l-.06-.06a2 2 0 112.83-2.83l.06.06a1.7 1.7 0 001.87.34H9a1.7 1.7 0 001.03-1.56V3a2 2 0 114 0v.09a1.7 1.7 0 001.03 1.56 1.7 1.7 0 001.87-.34l.06-.06a2 2 0 112.83 2.83l-.06.06a1.7 1.7 0 00-.34 1.87V9a1.7 1.7 0 001.56 1.03H21a2 2 0 110 4h-.09a1.7 1.7 0 00-1.51 1.03z"/>
-      </svg>
-      <span>设置</span>
-    </button>
+    <div class="topbar__account">
+      <button id="btn-account" class="icon-btn" type="button" title="登录 / 注册" aria-label="登录或注册">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/>
+          <path d="M4.5 20c.8-3.6 3.8-5.5 7.5-5.5s6.7 1.9 7.5 5.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        </svg>
+        <span id="account-label">登录/注册</span>
+      </button>
+      <div id="account-menu" class="account-menu" hidden>
+        <div class="account-menu__name" id="account-menu-name"></div>
+        <button id="btn-logout" type="button">退出登录</button>
+      </div>
+    </div>
   </header>
 
   <main class="menu">
@@ -102,6 +108,14 @@
 
     <section class="stats" id="stats" aria-label="专注数据"></section>
   </main>
+
+  <button id="btn-settings" class="feedback-btn corner-btn--left" type="button" title="设置">
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+      <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 15a3 3 0 100-6 3 3 0 000 6z"/>
+      <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.7 1.7 0 00.34 1.87l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.7 1.7 0 00-1.87-.34 1.7 1.7 0 00-1.03 1.56V21a2 2 0 11-4 0v-.09A1.7 1.7 0 009 19.35a1.7 1.7 0 00-1.87.34l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.7 1.7 0 00.34-1.87 1.7 1.7 0 00-1.56-1.03H3a2 2 0 110-4h.09A1.7 1.7 0 004.65 9a1.7 1.7 0 00-.34-1.87l-.06-.06a2 2 0 112.83-2.83l.06.06a1.7 1.7 0 001.87.34H9a1.7 1.7 0 001.03-1.56V3a2 2 0 114 0v.09a1.7 1.7 0 001.03 1.56 1.7 1.7 0 001.87-.34l.06-.06a2 2 0 112.83 2.83l-.06.06a1.7 1.7 0 00-.34 1.87V9a1.7 1.7 0 001.56 1.03H21a2 2 0 110 4h-.09a1.7 1.7 0 00-1.51 1.03z"/>
+    </svg>
+    <span>设置</span>
+  </button>
 
   <button id="btn-feedback" class="feedback-btn" type="button">
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -342,10 +356,42 @@
   </div>
 </div>
 
+<!-- ============ 登录 / 注册 ============ -->
+<div id="modal-auth" class="modal-mask" hidden>
+  <div class="modal modal--narrow" role="dialog" aria-modal="true" aria-label="登录或注册">
+    <button class="modal__close" data-close type="button" aria-label="关闭">×</button>
+    <h2 class="modal__title">星轨身份认证</h2>
+    <p class="modal__desc">注册一个专属身份代号，你的专注记录、舱位存档将与他人分开保存。</p>
+
+    <div class="auth-tabs" role="tablist">
+      <button id="auth-tab-login" class="active" type="button" role="tab">登录</button>
+      <button id="auth-tab-register" type="button" role="tab">注册</button>
+    </div>
+
+    <form id="auth-form" class="auth-form" autocomplete="off">
+      <label class="auth-field">
+        <span>身份代号</span>
+        <input id="auth-name" type="text" maxlength="12" placeholder="2–12 位中英文、数字或下划线" required />
+      </label>
+      <label class="auth-field">
+        <span>通讯密码</span>
+        <input id="auth-pwd" type="password" minlength="6" placeholder="至少 6 位" required />
+      </label>
+      <label class="auth-field" id="auth-pwd2-field" hidden>
+        <span>再次输入密码</span>
+        <input id="auth-pwd2" type="password" minlength="6" placeholder="确认密码" />
+      </label>
+      <p class="form-err" id="auth-err" hidden></p>
+      <button id="auth-submit" class="btn-primary" type="button">登录</button>
+      <p class="auth-note">账号仅保存在当前浏览器中，无需联网，也不会上传服务器；清除浏览器数据会同时删除账号。</p>
+    </form>
+  </div>
+</div>
+
 <!-- 全局轻提示 -->
 <div id="toast" class="toast" hidden></div>
 
-<script src="js/story.js?v=2.14"></script>
-<script src="js/app.js?v=2.14"></script>
+<script src="js/story.js?v=2.19"></script>
+<script src="js/app.js?v=2.19"></script>
 </body>
 </html>
