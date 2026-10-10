@@ -6,7 +6,7 @@
 <title>behuman · 成为人类吧！</title>
 <meta name="description" content="behuman 是一款剧情化专注自习网站：帮助流落地球的外星人在变回原型时躲过人群，用每一次专注换取留在地球的资格。" />
 <link rel="icon" href="assets/avatar.svg" />
-<link rel="stylesheet" href="css/style.css?v=2.27" />
+<link rel="stylesheet" href="css/style.css?v=2.28" />
 </head>
 <body>
 
@@ -342,19 +342,20 @@
       <div class="setting-row setting-row--inline">
         <div>
           <strong>B站背景音乐</strong>
-          <small>粘贴B站视频链接（BV 号）到下方文本框内，开始专注后后台播放该视频的声音（不显示画面）；填写后优先于本地导入音频。单曲结束不自动循环</small>
+          <small>粘贴B站视频链接（BV 号）到下方文本框内，可添加多个，填完一框会自动增加新框；按住左侧手柄可拖动排序。开始专注后后台播放（不显示画面），填写后优先于本地导入音频。</small>
         </div>
         <label class="switch">
           <input type="checkbox" id="set-bili-bgm-on" checked />
           <span class="switch__track"><i></i></span>
         </label>
       </div>
-      <div class="media-row">
-        <input type="text" id="set-bili-bgm" class="bili-input" placeholder="https://www.bilibili.com/video/BV…" maxlength="120" />
-        <span class="media-actions">
-          <button class="btn-ghost btn-ghost--small" id="set-bili-bgm-save" type="button">保存</button>
-          <button class="btn-ghost btn-ghost--small btn-danger" id="set-bili-bgm-clear" type="button" hidden>移除</button>
-        </span>
+      <div class="bili-list" id="bili-list"></div>
+      <div class="bili-mode">
+        <div class="seg" id="bili-mode-seg">
+          <button type="button" data-mode="seq" class="active">顺序播放</button>
+          <button type="button" data-mode="shuffle">打乱播放</button>
+        </div>
+        <p class="seg-hint" id="bili-mode-hint">按列表从上到下依次播放，播完即止。</p>
       </div>
     </div>
 
@@ -436,6 +437,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="js/story.js?v=2.26"></script>
-<script src="js/app.js?v=2.26"></script>
+<script src="js/app.js?v=2.30"></script>
 </body>
 </html>
