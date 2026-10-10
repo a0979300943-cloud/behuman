@@ -860,6 +860,45 @@ body.no-bgimg .space-bg { display: none; }
 }
 .setting-row:last-of-type { border-bottom: none; }
 .setting-row--column { flex-direction: column; align-items: flex-start; gap: 12px; }
+.setting-row--inline { width: 100%; padding: 0; border-bottom: none; }
+.volume-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  font-size: 13px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+.volume-row input[type="range"] {
+  flex: 1;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 999px;
+  background: rgba(124, 232, 255, 0.15);
+  outline: none;
+}
+.volume-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--cyan);
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(124, 232, 255, 0.6);
+}
+.volume-row input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 50%;
+  background: var(--cyan);
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(124, 232, 255, 0.6);
+}
+.volume-value { min-width: 32px; text-align: right; color: var(--text); }
 .setting-row strong { font-size: 15px; letter-spacing: 2px; }
 .setting-row small { display: block; margin-top: 5px; font-size: 12px; color: var(--text-dim); }
 .setting-row select {
@@ -1156,6 +1195,25 @@ body.no-focusimg .focus-run__bg { display: none; }
   transition: all 0.25s ease;
 }
 .focus-bgm:hover { background: rgba(255, 255, 255, 0.85); transform: translateY(-1px); }
+
+.focus-run__credit {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 14px;
+  z-index: 2;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: rgba(147, 166, 200, 0.55);
+  pointer-events: none;
+}
+.focus-run__credit a {
+  color: rgba(124, 232, 255, 0.6);
+  text-decoration: none;
+  pointer-events: auto;
+}
+.focus-run__credit a:hover { color: var(--cyan); text-decoration: underline; }
 
 .focus-warning {
   position: fixed;
