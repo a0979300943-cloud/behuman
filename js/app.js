@@ -128,7 +128,7 @@
   });
 
   let state = Object.assign(freshState(), store.get(KEY.state, {}));
-  let settings = Object.assign({ defaultMin: 25, sound: true, defaultWhiteNoise: true, rainVolume: 50, biliBgmOn: true }, store.get(KEY.settings, {}));
+  let settings = Object.assign({ defaultMin: 25, sound: true, defaultWhiteNoise: true, rainVolume: 50, biliBgmOn: true, biliBgmMode: 'seq' }, store.get(KEY.settings, {}));
   let slots = store.get(KEY.slots, { 1: null, 2: null, 3: null });
 
   const saveState = () => store.set(KEY.state, state);
@@ -169,7 +169,7 @@
   /* 切换身份后重新载入内存数据并刷新界面 */
   function afterAccountChanged() {
     state = Object.assign(freshState(), store.get(KEY.state, {}));
-    settings = Object.assign({ defaultMin: 25, sound: true, defaultWhiteNoise: true, rainVolume: 50, biliBgmOn: true }, store.get(KEY.settings, {}));
+    settings = Object.assign({ defaultMin: 25, sound: true, defaultWhiteNoise: true, rainVolume: 50, biliBgmOn: true, biliBgmMode: 'seq' }, store.get(KEY.settings, {}));
     slots = store.get(KEY.slots, { 1: null, 2: null, 3: null });
     renderStats();
     if (typeof syncSettingsUI === 'function') syncSettingsUI();
@@ -263,7 +263,14 @@
     select() { tone(520, 0.08, 'triangle', 0.05); },
     alarm() { [0, 0.35, 0.7].forEach(d => tone(880, 0.16, 'square', 0.045, d)); },
     success() { [523, 659, 784, 1046].forEach((f, i) => tone(f, 0.35, 'triangle', 0.06, i * 0.16)); },
-    fail() { [392, 311, 262].forEach((f, i) => tone(f, 0.4, 'sawtooth', 0.045, i * 0.22)); }
+    fail() { [392, 311, 262].forEach((f, i) => tone(f, 0.4, 'sawtooth', 0.045, i * 0.22)); },
+    /* 军号（小号）音效：sawtooth 模拟铜管谐波，上行号角动机 + 长音收尾。
+       off = 相对当前时刻的起始偏移（秒），用于在 success 琶音之后衔接 */
+    bugle(off) {
+      const o = off || 0;
+      [392, 523, 659, 784].forEach((f, i) => tone(f, 0.42, 'sawtooth', 0.05, o + i * 0.16));
+      tone(659, 0.9, 'sawtooth', 0.055, o + 0.66);
+    }
   };
 
   /* ---------------- 星空 ---------------- */
@@ -607,8 +614,8 @@
   }
 
   /* B站背景音乐：专注开始后注入隐藏 iframe，只听声音不显示画面 */
-  function biliBgmInject() {
-    const parsed = parseBiliId(settings.biliBgm);
+  function biliBgmInject(parsed) {
+    if (!parsed) parsed = parseBiliId(settings.biliBgm);
     if (!parsed) return;
     const box = $('#focus-bili');
     box.innerHTML = '';
@@ -623,6 +630,69 @@
     focus.bgmMode = 'bili';
   }
 
+  /* B站背景音乐队列：多视频按「顺序/打乱」模式自动切换 */
+  const biliQueue = { timer: null, idx: -1 };
+
+  function biliBgmIds() {
+    const list = (settings.biliBgmList && settings.biliBgmList.length)
+      ? settings.biliBgmList
+      : (settings.biliBgm ? [settings.biliBgm] : []);
+    const ids = [];
+    list.forEach(t => { const p = parseBiliId(t); if (p) ids.push(p); });
+    return ids;
+  }
+  function biliBgmStopTimer() {
+    if (biliQueue.timer) { clearTimeout(biliQueue.timer); biliQueue.timer = null; }
+  }
+  /* 查询视频时长（秒）：浏览器无法直连 B站 API（CORS/风控），逐级尝试公共代理；
+     全部失败返回 null（此时按兜底间隔轮换） */
+  function biliFetchDuration(item) {
+    const api = 'https://api.bilibili.com/x/web-interface/view?' +
+      (item.t === 'bv' ? 'bvid=' + item.id : 'aid=' + item.id);
+    const urls = [
+      api,
+      'https://api.allorigins.win/raw?url=' + encodeURIComponent(api),
+      'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(api)
+    ];
+    const tryFetch = (i) => {
+      if (i >= urls.length) return Promise.resolve(null);
+      const ctrl = ('AbortController' in window) ? new AbortController() : null;
+      const timer = ctrl ? setTimeout(() => ctrl.abort(), 6000) : null;
+      return fetch(urls[i], ctrl ? { signal: ctrl.signal } : {})
+        .then(r => (r.ok ? r.json() : Promise.reject(new Error('http ' + r.status))))
+        .then(j => (j && j.code === 0 && j.data && j.data.duration > 0)
+          ? j.data.duration : Promise.reject(new Error('bad data')))
+        .catch(() => tryFetch(i + 1))
+        .then(v => { if (timer) clearTimeout(timer); return v; });
+    };
+    return tryFetch(0);
+  }
+  function biliBgmPlayAt(ids, idx) {
+    biliBgmStopTimer();
+    biliQueue.idx = idx;
+    biliBgmInject(ids[idx]);
+    $('#focus-bgm').textContent = '🎵';
+    $('#focus-bgm').hidden = false;
+    /* 播完自动切下一首：优先按精确时长（多留 8 秒起播余量）；探测不到时长则按 4 分钟兜底轮换 */
+    biliFetchDuration(ids[idx]).then(dur => {
+      const wait = (dur > 0 ? dur + 8 : 240) * 1000;
+      biliQueue.timer = setTimeout(() => {
+        biliQueue.timer = null;
+        biliBgmScheduleNext();
+      }, wait);
+    });
+  }
+  function biliBgmScheduleNext() {
+    const ids = biliBgmIds();
+    if (!ids.length || focus.phase === 'idle') return;
+    if (settings.biliBgmMode === 'shuffle') {
+      biliBgmPlayAt(ids, Math.floor(Math.random() * ids.length));
+    } else {
+      /* 顺序模式：从上到下依次播放，播完列表即止 */
+      if (biliQueue.idx + 1 < ids.length) biliBgmPlayAt(ids, biliQueue.idx + 1);
+    }
+  }
+
   function startBgm() {
     /* 默认白噪音（雨声）独立播放，不影响 BGM 与状态音效 */
     const rain = $('#sfx-rain');
@@ -633,15 +703,31 @@
         if (rp && rp.catch) rp.catch(() => {});
       } catch (e) {}
     }
-    if (parseBiliId(settings.biliBgm) && settings.biliBgm) {
-      biliBgmInject();
-      $('#focus-bgm').textContent = '🎵';
-      $('#focus-bgm').hidden = false;
-      return;
+    if (settings.biliBgmOn) {
+      const ids = biliBgmIds();
+      if (ids.length) {
+        /* 休息结束时 iframe 仍在播（音乐贯穿休息），不重置播放，只恢复 🎵 显示 */
+        if (focus.bgmMode === 'bili' && $('#focus-bili').firstChild) {
+          $('#focus-bgm').textContent = '🎵';
+          $('#focus-bgm').hidden = false;
+          return;
+        }
+        const first = settings.biliBgmMode === 'shuffle'
+          ? Math.floor(Math.random() * ids.length)
+          : 0;
+        biliBgmPlayAt(ids, first);
+        return;
+      }
     }
     media.get('audio').then(rec => {
       if (focus.phase !== 'focus' || !rec || !rec.blob) return;
       const a = $('#focus-audio');
+      /* 休息结束时本地音频仍在播，不重置 */
+      if (a.src && !a.paused) {
+        $('#focus-bgm').textContent = '🎵';
+        $('#focus-bgm').hidden = false;
+        return;
+      }
       focus.bgmURL = URL.createObjectURL(rec.blob);
       a.src = focus.bgmURL;
       a.volume = 0.45;
@@ -657,6 +743,8 @@
     a.removeAttribute('src');
     try { a.load(); } catch (e) {}
     $('#focus-bili').innerHTML = '';
+    biliBgmStopTimer();
+    biliQueue.idx = -1;
     focus.bgmMode = '';
     $('#focus-bgm').hidden = true;
     if (focus.bgmURL) { URL.revokeObjectURL(focus.bgmURL); focus.bgmURL = null; }
@@ -889,9 +977,12 @@
     saveState();
     renderStats();
     sfx.success();
+    /* 躦藏结束：在成功琶音后接一段军号收尾 */
+    sfx.bugle(0.9);
 
     clearInterval(focus.statusTimer);
-    stopBgm();
+    /* 连续模式：休息时保留 B站 iframe / 本地音频 / 雨声继续播放（音乐贯穿休息），
+       不调 stopBgm；真正结束（endFocus / 单次模式）才销毁 */
     if (focus.continuous) {
       // 已完成设定轮数：直接结算，不再进入休息
       if (focus.round >= focus.totalRounds) { endFocus(true); return; }
@@ -1044,10 +1135,12 @@
       const box = $('#focus-bili');
       if (box.firstChild) {
         box.innerHTML = '';
+        biliBgmStopTimer();
         $('#focus-bgm').textContent = '🔇';
       } else {
-        biliBgmInject();
-        $('#focus-bgm').textContent = '🎵';
+        const ids = biliBgmIds();
+        const at = (biliQueue.idx >= 0 && biliQueue.idx < ids.length) ? biliQueue.idx : 0;
+        if (ids.length) biliBgmPlayAt(ids, at);
       }
       return;
     }
@@ -1132,8 +1225,8 @@
     $('#set-rain-vol').value = String(settings.rainVolume);
     $('#set-rain-vol-val').textContent = String(settings.rainVolume);
     $('#set-bili-bgm-on').checked = !!settings.biliBgmOn;
-    $('#set-bili-bgm').value = settings.biliBgm || '';
-    $('#set-bili-bgm-clear').hidden = !settings.biliBgm;
+    renderBiliList();
+    syncBiliModeUI();
     syncMediaUI();
   }
 
@@ -1179,24 +1272,92 @@
   }
   bindMediaImport('set-audio-btn', 'set-audio-file', 'set-audio-clear', 'audio', 100);
 
-  /* ---------------- B站背景音乐设置 ---------------- */
-  $('#set-bili-bgm-save').addEventListener('click', () => {
-    const raw = $('#set-bili-bgm').value.trim();
-    if (!parseBiliId(raw)) { toast('没识别出 BV 号或 av 号，请检查链接'); return; }
-    settings.biliBgm = raw;
+  /* ---------------- B站背景音乐设置（多链接 + 拖动排序 + 播放模式） ---------------- */
+  const BILI_MODE_HINTS = {
+    seq: '按列表从上到下依次播放，播完即止。',
+    shuffle: '每首播完后，随机跳到列表中的任意一首，直到专注结束。'
+  };
+  function syncBiliModeUI() {
+    const mode = settings.biliBgmMode === 'shuffle' ? 'shuffle' : 'seq';
+    $$('#bili-mode-seg button').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    $('#bili-mode-hint').textContent = BILI_MODE_HINTS[mode];
+  }
+  function collectBiliList() {
+    return $$('#bili-list .bili-item__input').map(i => i.value.trim()).filter(v => v);
+  }
+  function saveBiliList() {
+    settings.biliBgmList = collectBiliList();
     saveSettings();
-    $('#set-bili-bgm-clear').hidden = false;
-    sfx.select();
-    toast('已保存，专注时将后台播放该视频声音');
+  }
+  function makeBiliRow(value) {
+    const row = document.createElement('div');
+    row.className = 'bili-item';
+    row.innerHTML =
+      '<span class="bili-item__grip" title="拖动排序">' +
+      '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' +
+      '</span>' +
+      '<input type="text" class="bili-input bili-item__input" placeholder="https://www.bilibili.com/video/BV…" maxlength="120" />' +
+      '<button type="button" class="bili-item__del" title="移除">×</button>';
+    const input = $('.bili-item__input', row);
+    input.value = value || '';
+    /* 输入即保存；最后一行填入有效链接后自动追加一个新框 */
+    input.addEventListener('input', () => {
+      const rows = $$('#bili-list .bili-item');
+      if (row === rows[rows.length - 1] && parseBiliId(input.value)) {
+        $('#bili-list').appendChild(makeBiliRow(''));
+      }
+      saveBiliList();
+    });
+    $('.bili-item__del', row).addEventListener('click', () => {
+      row.remove();
+      if (!$('#bili-list .bili-item')) $('#bili-list').appendChild(makeBiliRow(''));
+      saveBiliList();
+      sfx.select();
+    });
+    /* 拖动排序：按住手柄才允许拖动，避免干扰输入框内选词 */
+    const grip = $('.bili-item__grip', row);
+    grip.addEventListener('mousedown', () => { row.draggable = true; });
+    row.addEventListener('dragstart', (e) => {
+      if (!row.draggable) { e.preventDefault(); return; }
+      row.classList.add('bili-item--dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', 'bili'); } catch (err) {}
+    });
+    row.addEventListener('dragover', (e) => {
+      const dragging = $('#bili-list .bili-item--dragging');
+      if (!dragging || dragging === row) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = row.getBoundingClientRect();
+      const before = e.clientY < rect.top + rect.height / 2;
+      $('#bili-list').insertBefore(dragging, before ? row : row.nextSibling);
+    });
+    row.addEventListener('dragend', () => {
+      row.classList.remove('bili-item--dragging');
+      row.draggable = false;
+      saveBiliList();
+    });
+    return row;
+  }
+  function renderBiliList() {
+    const box = $('#bili-list');
+    box.innerHTML = '';
+    const list = (settings.biliBgmList && settings.biliBgmList.length)
+      ? settings.biliBgmList.slice()
+      : (settings.biliBgm ? [settings.biliBgm] : []);
+    if (!list.length) list.push('');
+    list.forEach(v => box.appendChild(makeBiliRow(v)));
+  }
+  /* 手柄点击（未发生拖动）后释放鼠标，恢复不可拖状态 */
+  document.addEventListener('mouseup', () => {
+    $$('#bili-list .bili-item').forEach(r => { r.draggable = false; });
   });
-  $('#set-bili-bgm-clear').addEventListener('click', () => {
-    settings.biliBgm = '';
+  $$('#bili-mode-seg button').forEach(b => b.addEventListener('click', () => {
+    settings.biliBgmMode = b.dataset.mode;
     saveSettings();
-    $('#set-bili-bgm').value = '';
-    $('#set-bili-bgm-clear').hidden = true;
-    sfx.select();
-    toast('已移除，恢复本地音频或静音');
-  });
+    syncBiliModeUI();
+    if (settings.sound) sfx.select();
+  }));
   $('#set-default-min').addEventListener('change', (e) => {
     settings.defaultMin = Number(e.target.value);
     saveSettings();
