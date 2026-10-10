@@ -6,7 +6,7 @@
 <title>behuman · 成为人类吧！</title>
 <meta name="description" content="behuman 是一款剧情化专注自习网站：帮助流落地球的外星人在变回原型时躲过人群，用每一次专注换取留在地球的资格。" />
 <link rel="icon" href="assets/avatar.svg" />
-<link rel="stylesheet" href="css/style.css?v=2.22" />
+<link rel="stylesheet" href="css/style.css?v=2.27" />
 </head>
 <body>
 
@@ -201,6 +201,9 @@
   <img class="focus-run__bg" src="assets/scene5.svg" alt="" />
   <div class="focus-run__mask"></div>
   <audio id="focus-audio" loop preload="auto"></audio>
+  <audio id="sfx-footsteps" src="assets/footsteps.m4a" preload="auto"></audio>
+  <audio id="sfx-talking" src="assets/talking.m4a" preload="auto"></audio>
+  <audio id="sfx-rain" src="assets/rain.m4a?v=2.27" loop preload="auto"></audio>
     <div id="focus-bili" class="focus-bili" aria-hidden="true"></div>
   <button id="focus-bgm" class="focus-bgm" type="button" title="背景音乐开关" hidden>🎵</button>
 
@@ -229,6 +232,8 @@
     </div>
     <button id="focus-abort" class="btn-ghost" type="button">放弃，现形</button>
   </div>
+
+  <p class="focus-run__credit">下雨天 许可:CC-BY 作者:fanh 来源:<a href="https://www.ear0.com/sound/33826" target="_blank" rel="noopener noreferrer">耳聆网</a></p>
 
   <div id="focus-warning" class="focus-warning" hidden>
     <div class="focus-warning__box">
@@ -301,6 +306,24 @@
     </div>
 
     <div class="setting-row setting-row--column">
+      <div class="setting-row setting-row--inline">
+        <div>
+          <strong>默认白噪音</strong>
+          <small>专注开始后自动播放雨声作为底噪，与其他音频同时播放</small>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="set-rain" />
+          <span class="switch__track"><i></i></span>
+        </label>
+      </div>
+      <div class="volume-row">
+        <span class="volume-label">音量</span>
+        <input type="range" id="set-rain-vol" min="0" max="100" value="50" />
+        <span class="volume-value" id="set-rain-vol-val">50</span>
+      </div>
+    </div>
+
+    <div class="setting-row setting-row--column">
       <div>
         <strong>导入专注音频</strong>
         <small>专注期间循环播放的背景音乐，音频仅保存在本机浏览器中</small>
@@ -316,9 +339,15 @@
     </div>
 
     <div class="setting-row setting-row--column">
-      <div>
-        <strong>B站背景音乐</strong>
-        <small>粘贴B站视频链接（BV 号）到下方文本框内，开始专注后后台播放该视频的声音（不显示画面）；填写后优先于本地导入音频。单曲结束不自动循环</small>
+      <div class="setting-row setting-row--inline">
+        <div>
+          <strong>B站背景音乐</strong>
+          <small>粘贴B站视频链接（BV 号）到下方文本框内，开始专注后后台播放该视频的声音（不显示画面）；填写后优先于本地导入音频。单曲结束不自动循环</small>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="set-bili-bgm-on" checked />
+          <span class="switch__track"><i></i></span>
+        </label>
       </div>
       <div class="media-row">
         <input type="text" id="set-bili-bgm" class="bili-input" placeholder="https://www.bilibili.com/video/BV…" maxlength="120" />
@@ -406,7 +435,7 @@
 <!-- 全局轻提示 -->
 <div id="toast" class="toast" hidden></div>
 
-<script src="js/story.js?v=2.22"></script>
-<script src="js/app.js?v=2.22"></script>
+<script src="js/story.js?v=2.26"></script>
+<script src="js/app.js?v=2.26"></script>
 </body>
 </html>
