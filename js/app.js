@@ -128,7 +128,7 @@
   });
 
   let state = Object.assign(freshState(), store.get(KEY.state, {}));
-  let settings = Object.assign({ defaultMin: 25, sound: true }, store.get(KEY.settings, {}));
+  let settings = Object.assign({ defaultMin: 25, sound: true, defaultWhiteNoise: true, rainVolume: 50, biliBgmOn: true }, store.get(KEY.settings, {}));
   let slots = store.get(KEY.slots, { 1: null, 2: null, 3: null });
 
   const saveState = () => store.set(KEY.state, state);
@@ -169,7 +169,7 @@
   /* 切换身份后重新载入内存数据并刷新界面 */
   function afterAccountChanged() {
     state = Object.assign(freshState(), store.get(KEY.state, {}));
-    settings = Object.assign({ defaultMin: 25, sound: true }, store.get(KEY.settings, {}));
+    settings = Object.assign({ defaultMin: 25, sound: true, defaultWhiteNoise: true, rainVolume: 50, biliBgmOn: true }, store.get(KEY.settings, {}));
     slots = store.get(KEY.slots, { 1: null, 2: null, 3: null });
     renderStats();
     if (typeof syncSettingsUI === 'function') syncSettingsUI();
@@ -577,8 +577,34 @@
     ],
     statusIdx: 0,
     bgmURL: null,
-    bgmMode: ''
+    bgmMode: '',
+    sfxTimer: null,
+    sfxEl: null
   };
+
+  /* 专注状态音效：根据当前状态文本播放对应环境音，5 秒后停止 */
+  function stopStatusSfx() {
+    if (focus.sfxTimer) { clearTimeout(focus.sfxTimer); focus.sfxTimer = null; }
+    if (focus.sfxEl) {
+      try { focus.sfxEl.pause(); focus.sfxEl.currentTime = 0; } catch (e) {}
+      focus.sfxEl = null;
+    }
+  }
+  function playStatusSfx(text) {
+    stopStatusSfx();
+    let el = null;
+    if (text === '巷口有脚步声经过…') el = $('#sfx-footsteps');
+    else if (text === '远处传来人类的交谈声…') el = $('#sfx-talking');
+    if (!el) return;
+    try {
+      el.currentTime = 0;
+      el.volume = 0.9;
+      const p = el.play();
+      if (p && p.catch) p.catch(() => {});
+      focus.sfxEl = el;
+      focus.sfxTimer = setTimeout(stopStatusSfx, 5000);
+    } catch (e) {}
+  }
 
   /* B站背景音乐：专注开始后注入隐藏 iframe，只听声音不显示画面 */
   function biliBgmInject() {
@@ -598,7 +624,16 @@
   }
 
   function startBgm() {
-    if (parseBiliId(settings.biliBgm)) {
+    /* 默认白噪音（雨声）独立播放，不影响 BGM 与状态音效 */
+    const rain = $('#sfx-rain');
+    if (settings.defaultWhiteNoise) {
+      try {
+        rain.volume = Math.max(0, Math.min(100, Number(settings.rainVolume) || 0)) / 100;
+        const rp = rain.play();
+        if (rp && rp.catch) rp.catch(() => {});
+      } catch (e) {}
+    }
+    if (parseBiliId(settings.biliBgm) && settings.biliBgm) {
       biliBgmInject();
       $('#focus-bgm').textContent = '🎵';
       $('#focus-bgm').hidden = false;
@@ -625,6 +660,9 @@
     focus.bgmMode = '';
     $('#focus-bgm').hidden = true;
     if (focus.bgmURL) { URL.revokeObjectURL(focus.bgmURL); focus.bgmURL = null; }
+    /* 停止默认白噪音 */
+    const rain = $('#sfx-rain');
+    try { rain.pause(); rain.currentTime = 0; } catch (e) {}
   }
 
   function resetDurationUI() {
@@ -785,13 +823,16 @@
     clearInterval(focus.statusTimer);
     focus.statusTimer = setInterval(() => {
       focus.statusIdx = (focus.statusIdx + 1) % focus.statuses.length;
-      $('#focus-status').textContent = focus.statuses[focus.statusIdx];
+      const t = focus.statuses[focus.statusIdx];
+      $('#focus-status').textContent = t;
+      playStatusSfx(t);
     }, 22000);
 
     startBgm();
   }
 
   function beginBreak() {
+    stopStatusSfx();
     focus.phase = 'break';
     focus.totalMs = focus.breakMs;
     focus.endAt = Date.now() + focus.breakMs;
@@ -858,6 +899,7 @@
     } else {
       endFocus(true);
     }
+    stopStatusSfx();
   }
 
   function endFocus(success, aborted) {
@@ -870,6 +912,7 @@
     clearInterval(focus.timer);
     clearInterval(focus.statusTimer);
     stopBgm();
+    stopStatusSfx();
     document.title = 'behuman · 成为人类吧！';
 
     const run = $('#focus-running');
@@ -1085,6 +1128,10 @@
   function syncSettingsUI() {
     $('#set-default-min').value = String(settings.defaultMin);
     $('#set-sound').checked = !!settings.sound;
+    $('#set-rain').checked = !!settings.defaultWhiteNoise;
+    $('#set-rain-vol').value = String(settings.rainVolume);
+    $('#set-rain-vol-val').textContent = String(settings.rainVolume);
+    $('#set-bili-bgm-on').checked = !!settings.biliBgmOn;
     $('#set-bili-bgm').value = settings.biliBgm || '';
     $('#set-bili-bgm-clear').hidden = !settings.biliBgm;
     syncMediaUI();
@@ -1157,6 +1204,22 @@
   });
   $('#set-sound').addEventListener('change', (e) => {
     settings.sound = e.target.checked;
+    saveSettings();
+    if (settings.sound) sfx.select();
+  });
+  $('#set-rain').addEventListener('change', (e) => {
+    settings.defaultWhiteNoise = e.target.checked;
+    saveSettings();
+    if (settings.sound) sfx.select();
+  });
+  $('#set-rain-vol').addEventListener('input', (e) => {
+    const v = Number(e.target.value) || 0;
+    settings.rainVolume = v;
+    $('#set-rain-vol-val').textContent = String(v);
+    saveSettings();
+  });
+  $('#set-bili-bgm-on').addEventListener('change', (e) => {
+    settings.biliBgmOn = e.target.checked;
     saveSettings();
     if (settings.sound) sfx.select();
   });
