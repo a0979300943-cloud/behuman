@@ -985,6 +985,47 @@ body.no-bgimg .space-bg { display: none; }
 .focus-bili iframe { width: 320px; height: 200px; border: 0; }
 .media-actions { display: inline-flex; gap: 8px; flex: none; }
 
+/* B站背景音乐：多链接列表（可拖动排序） */
+.bili-list { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.bili-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(130, 200, 255, 0.22);
+  background: rgba(255, 255, 255, 0.03);
+  transition: border-color 0.2s ease, opacity 0.2s ease;
+}
+.bili-item--dragging { opacity: 0.45; border-style: dashed; border-color: rgba(124, 232, 255, 0.5); }
+.bili-item__grip {
+  flex: none;
+  width: 18px;
+  cursor: grab;
+  color: rgba(147, 166, 200, 0.55);
+  display: inline-flex;
+  justify-content: center;
+  user-select: none;
+}
+.bili-item__grip:active { cursor: grabbing; }
+.bili-item__grip svg { pointer-events: none; }
+.bili-item .bili-input { border-color: transparent; background: transparent; padding: 7px 6px; }
+.bili-item .bili-input:focus { border-color: rgba(124, 232, 255, 0.5); background: rgba(4, 8, 20, 0.7); }
+.bili-item__del {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: rgba(147, 166, 200, 0.6);
+  font-size: 15px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.bili-item__del:hover { color: var(--danger); background: rgba(255, 122, 144, 0.12); }
+.bili-mode { width: 100%; margin-top: 2px; }
+
 /* 反馈表单 */
 .field-label { display: block; margin: 14px 0 8px; font-size: 13px; letter-spacing: 2px; color: var(--text-dim); }
 #feedback-form textarea,
