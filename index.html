@@ -6,7 +6,7 @@
 <title>behuman · 成为人类吧！</title>
 <meta name="description" content="behuman 是一款剧情化专注自习网站：帮助流落地球的外星人在变回原型时躲过人群，用每一次专注换取留在地球的资格。" />
 <link rel="icon" href="assets/avatar.svg" />
-<link rel="stylesheet" href="css/style.css?v=2.28" />
+<link rel="stylesheet" href="css/style.css?v=2.31" />
 </head>
 <body>
 
@@ -342,13 +342,19 @@
       <div class="setting-row setting-row--inline">
         <div>
           <strong>B站背景音乐</strong>
-          <small>粘贴B站视频链接（BV 号）到下方文本框内，可添加多个，填完一框会自动增加新框；按住左侧手柄可拖动排序。开始专注后后台播放（不显示画面），填写后优先于本地导入音频。</small>
+          <small>粘贴B站视频链接（BV 号），可添加多个，填入有效链接后自动增加新框；点击左侧三杠可命名该链接并选择显示名称或网址，按住三杠可拖动排序。开始专注后后台播放（不显示画面），填写后优先于本地导入音频。</small>
         </div>
         <label class="switch">
           <input type="checkbox" id="set-bili-bgm-on" checked />
           <span class="switch__track"><i></i></span>
         </label>
       </div>
+      <div class="volume-row">
+        <span class="volume-label">音量</span>
+        <input type="range" id="set-bili-vol" min="0" max="100" value="100" />
+        <span class="volume-value" id="set-bili-vol-val">100</span>
+      </div>
+      <p class="seg-hint" style="margin:-4px 0 2px;">受 B站外链播放器限制：拖到 0 为静音，其余档位为视频原声音量（改动在下次播放时生效）。</p>
       <div class="bili-list" id="bili-list"></div>
       <div class="bili-mode">
         <div class="seg" id="bili-mode-seg">
@@ -437,6 +443,6 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="js/story.js?v=2.26"></script>
-<script src="js/app.js?v=2.30"></script>
+<script src="js/app.js?v=2.31"></script>
 </body>
 </html>
