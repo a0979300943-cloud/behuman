@@ -128,7 +128,7 @@
   });
 
   let state = Object.assign(freshState(), store.get(KEY.state, {}));
-  let settings = Object.assign({ defaultMin: 25, sound: true, defaultWhiteNoise: true, rainVolume: 50, biliBgmOn: true, biliBgmMode: 'seq' }, store.get(KEY.settings, {}));
+  let settings = Object.assign({ defaultMin: 25, sound: true, defaultWhiteNoise: true, rainVolume: 50, biliBgmOn: true, biliBgmMode: 'seq', biliBgmVolume: 100 }, store.get(KEY.settings, {}));
   let slots = store.get(KEY.slots, { 1: null, 2: null, 3: null });
 
   const saveState = () => store.set(KEY.state, state);
@@ -169,7 +169,7 @@
   /* 切换身份后重新载入内存数据并刷新界面 */
   function afterAccountChanged() {
     state = Object.assign(freshState(), store.get(KEY.state, {}));
-    settings = Object.assign({ defaultMin: 25, sound: true, defaultWhiteNoise: true, rainVolume: 50, biliBgmOn: true, biliBgmMode: 'seq' }, store.get(KEY.settings, {}));
+    settings = Object.assign({ defaultMin: 25, sound: true, defaultWhiteNoise: true, rainVolume: 50, biliBgmOn: true, biliBgmMode: 'seq', biliBgmVolume: 100 }, store.get(KEY.settings, {}));
     slots = store.get(KEY.slots, { 1: null, 2: null, 3: null });
     renderStats();
     if (typeof syncSettingsUI === 'function') syncSettingsUI();
@@ -620,9 +620,11 @@
     const box = $('#focus-bili');
     box.innerHTML = '';
     const f = document.createElement('iframe');
+    /* B站外链播放器不支持分级音量，仅 muted 0/1：滑块为 0 时静音，其余档位原声 */
+    const muted = Number(settings.biliBgmVolume) === 0 ? 1 : 0;
     f.src = 'https://player.bilibili.com/player.html?' +
       (parsed.t === 'bv' ? 'bvid=' + parsed.id : 'aid=' + parsed.id) +
-      '&autoplay=1&mute=0&danmaku=0';
+      '&autoplay=1&muted=' + muted + '&danmaku=0';
     f.setAttribute('frameborder', '0');
     f.setAttribute('scrolling', 'no');
     f.setAttribute('allow', 'autoplay; encrypted-media');
@@ -633,12 +635,23 @@
   /* B站背景音乐队列：多视频按「顺序/打乱」模式自动切换 */
   const biliQueue = { timer: null, idx: -1 };
 
-  function biliBgmIds() {
-    const list = (settings.biliBgmList && settings.biliBgmList.length)
+  /* 规范化 B站链接列表：旧版为字符串数组，统一升级为 {name,url,show}；show=name|url */
+  function normBiliItems() {
+    const raw = (settings.biliBgmList && settings.biliBgmList.length)
       ? settings.biliBgmList
       : (settings.biliBgm ? [settings.biliBgm] : []);
+    return raw.map(x => {
+      if (typeof x === 'string') return { name: '', url: x, show: 'name' };
+      return {
+        name: (x.name != null ? String(x.name) : ''),
+        url: (x.url != null ? String(x.url) : ''),
+        show: x.show === 'url' ? 'url' : 'name'
+      };
+    });
+  }
+  function biliBgmIds() {
     const ids = [];
-    list.forEach(t => { const p = parseBiliId(t); if (p) ids.push(p); });
+    normBiliItems().forEach(it => { const p = parseBiliId(it.url); if (p) ids.push(p); });
     return ids;
   }
   function biliBgmStopTimer() {
@@ -1225,6 +1238,8 @@
     $('#set-rain-vol').value = String(settings.rainVolume);
     $('#set-rain-vol-val').textContent = String(settings.rainVolume);
     $('#set-bili-bgm-on').checked = !!settings.biliBgmOn;
+    $('#set-bili-vol').value = String(settings.biliBgmVolume);
+    $('#set-bili-vol-val').textContent = String(settings.biliBgmVolume);
     renderBiliList();
     syncBiliModeUI();
     syncMediaUI();
@@ -1272,7 +1287,7 @@
   }
   bindMediaImport('set-audio-btn', 'set-audio-file', 'set-audio-clear', 'audio', 100);
 
-  /* ---------------- B站背景音乐设置（多链接 + 拖动排序 + 播放模式） ---------------- */
+  /* ---------------- B站背景音乐设置（多链接命名/排序 + 播放模式） ---------------- */
   const BILI_MODE_HINTS = {
     seq: '按列表从上到下依次播放，播完即止。',
     shuffle: '每首播完后，随机跳到列表中的任意一首，直到专注结束。'
@@ -1283,74 +1298,144 @@
     $('#bili-mode-hint').textContent = BILI_MODE_HINTS[mode];
   }
   function collectBiliList() {
-    return $$('#bili-list .bili-item__input').map(i => i.value.trim()).filter(v => v);
+    return $$('#bili-list .bili-card').map(card => ({
+      name: $('.bili-edit__name', card).value.trim(),
+      url: $('.bili-edit__url', card).value.trim(),
+      show: card._data.show
+    })).filter(it => it.name || it.url);
   }
   function saveBiliList() {
     settings.biliBgmList = collectBiliList();
     saveSettings();
   }
-  function makeBiliRow(value) {
-    const row = document.createElement('div');
-    row.className = 'bili-item';
-    row.innerHTML =
-      '<span class="bili-item__grip" title="拖动排序">' +
-      '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' +
-      '</span>' +
-      '<input type="text" class="bili-input bili-item__input" placeholder="https://www.bilibili.com/video/BV…" maxlength="120" />' +
-      '<button type="button" class="bili-item__del" title="移除">×</button>';
-    const input = $('.bili-item__input', row);
-    input.value = value || '';
-    /* 输入即保存；最后一行填入有效链接后自动追加一个新框 */
-    input.addEventListener('input', () => {
-      const rows = $$('#bili-list .bili-item');
-      if (row === rows[rows.length - 1] && parseBiliId(input.value)) {
-        $('#bili-list').appendChild(makeBiliRow(''));
+  /* 折叠态显示文本：按 show 取名称或网址，缺省互相回退；全空返回占位 */
+  function biliLabelText(d) {
+    const name = d.name.trim(), url = d.url.trim();
+    if (d.show === 'name') return { text: name || url, empty: !(name || url) };
+    return { text: url || name, empty: !(name || url) };
+  }
+  function makeBiliCard(data) {
+    const card = document.createElement('div');
+    card.className = 'bili-card';
+    card._data = data;
+    card.innerHTML =
+      '<div class="bili-item">' +
+        '<span class="bili-item__grip" title="点击编辑名称 / 按住拖动排序">' +
+          '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' +
+        '</span>' +
+        '<button type="button" class="bili-item__label"></button>' +
+        '<button type="button" class="bili-item__del" title="移除">×</button>' +
+      '</div>' +
+      '<div class="bili-edit" hidden>' +
+        '<label class="bili-edit__field"><span>名称</span>' +
+          '<input type="text" class="bili-edit__name" maxlength="40" placeholder="给这段声音起个名字，如：雨夜白噪音" /></label>' +
+        '<label class="bili-edit__field"><span>链接</span>' +
+          '<input type="text" class="bili-edit__url" placeholder="https://www.bilibili.com/video/BV…" maxlength="120" /></label>' +
+        '<div class="bili-edit__bottom"><div class="seg bili-edit__seg">' +
+          '<button type="button" data-show="name">显示名称</button>' +
+          '<button type="button" data-show="url">显示网址</button>' +
+        '</div></div>' +
+      '</div>';
+
+    const nameInput = $('.bili-edit__name', card);
+    const urlInput = $('.bili-edit__url', card);
+    const labelBtn = $('.bili-item__label', card);
+    const editPanel = $('.bili-edit', card);
+    nameInput.value = data.name;
+    urlInput.value = data.url;
+
+    const refreshLabel = () => {
+      const L = biliLabelText(card._data);
+      labelBtn.textContent = L.empty ? '未设置链接 · 点击三杠编辑' : L.text;
+      labelBtn.classList.toggle('is-empty', L.empty);
+    };
+    const refreshSeg = () => {
+      $$('.bili-edit__seg button', card).forEach(b =>
+        b.classList.toggle('active', b.dataset.show === card._data.show));
+    };
+    refreshLabel();
+    refreshSeg();
+
+    /* 点击三杠（或标签）展开/收起命名面板 */
+    const setExpanded = (open) => {
+      editPanel.hidden = !open;
+      card.classList.toggle('bili-card--open', open);
+    };
+    let dragMoved = false;
+    $('.bili-item__grip', card).addEventListener('click', () => {
+      if (!dragMoved) setExpanded(editPanel.hidden);
+    });
+    labelBtn.addEventListener('click', () => setExpanded(editPanel.hidden));
+
+    /* 编辑即保存；最后一张卡片填入有效链接后自动追加新卡片 */
+    const onInput = () => {
+      card._data.name = nameInput.value;
+      card._data.url = urlInput.value;
+      refreshLabel();
+      const cards = $$('#bili-list .bili-card');
+      if (card === cards[cards.length - 1] && parseBiliId(urlInput.value)) {
+        $('#bili-list').appendChild(makeBiliCard({ name: '', url: '', show: 'name' }));
       }
       saveBiliList();
-    });
-    $('.bili-item__del', row).addEventListener('click', () => {
-      row.remove();
-      if (!$('#bili-list .bili-item')) $('#bili-list').appendChild(makeBiliRow(''));
+    };
+    nameInput.addEventListener('input', onInput);
+    urlInput.addEventListener('input', onInput);
+
+    /* 折叠态显示：自主名称 或 网址 */
+    $$('.bili-edit__seg button', card).forEach(b => b.addEventListener('click', () => {
+      card._data.show = b.dataset.show;
+      refreshSeg();
+      refreshLabel();
+      saveBiliList();
+      sfx.select();
+    }));
+
+    $('.bili-item__del', card).addEventListener('click', () => {
+      card.remove();
+      if (!$('#bili-list .bili-card')) {
+        $('#bili-list').appendChild(makeBiliCard({ name: '', url: '', show: 'name' }));
+      }
       saveBiliList();
       sfx.select();
     });
-    /* 拖动排序：按住手柄才允许拖动，避免干扰输入框内选词 */
-    const grip = $('.bili-item__grip', row);
-    grip.addEventListener('mousedown', () => { row.draggable = true; });
-    row.addEventListener('dragstart', (e) => {
-      if (!row.draggable) { e.preventDefault(); return; }
-      row.classList.add('bili-item--dragging');
+
+    /* 拖动排序：按住三杠才允许拖，与点击展开区分；真实拖动后抑制本次 click */
+    const grip = $('.bili-item__grip', card);
+    grip.addEventListener('mousedown', () => { card.draggable = true; });
+    card.addEventListener('dragstart', (e) => {
+      if (!card.draggable) { e.preventDefault(); return; }
+      dragMoved = true;
+      card.classList.add('bili-card--dragging');
       e.dataTransfer.effectAllowed = 'move';
       try { e.dataTransfer.setData('text/plain', 'bili'); } catch (err) {}
     });
-    row.addEventListener('dragover', (e) => {
-      const dragging = $('#bili-list .bili-item--dragging');
-      if (!dragging || dragging === row) return;
+    card.addEventListener('dragover', (e) => {
+      const dragging = $('#bili-list .bili-card--dragging');
+      if (!dragging || dragging === card) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      const rect = row.getBoundingClientRect();
+      const rect = card.getBoundingClientRect();
       const before = e.clientY < rect.top + rect.height / 2;
-      $('#bili-list').insertBefore(dragging, before ? row : row.nextSibling);
+      $('#bili-list').insertBefore(dragging, before ? card : card.nextSibling);
     });
-    row.addEventListener('dragend', () => {
-      row.classList.remove('bili-item--dragging');
-      row.draggable = false;
+    card.addEventListener('dragend', () => {
+      card.classList.remove('bili-card--dragging');
+      card.draggable = false;
       saveBiliList();
+      setTimeout(() => { dragMoved = false; }, 0);
     });
-    return row;
+    return card;
   }
   function renderBiliList() {
     const box = $('#bili-list');
     box.innerHTML = '';
-    const list = (settings.biliBgmList && settings.biliBgmList.length)
-      ? settings.biliBgmList.slice()
-      : (settings.biliBgm ? [settings.biliBgm] : []);
-    if (!list.length) list.push('');
-    list.forEach(v => box.appendChild(makeBiliRow(v)));
+    const list = normBiliItems();
+    if (!list.length) list.push({ name: '', url: '', show: 'name' });
+    list.forEach(d => box.appendChild(makeBiliCard(d)));
   }
-  /* 手柄点击（未发生拖动）后释放鼠标，恢复不可拖状态 */
+  /* 松开鼠标后恢复卡片不可拖状态（拖动手柄 mousedown 时才临时开启） */
   document.addEventListener('mouseup', () => {
-    $$('#bili-list .bili-item').forEach(r => { r.draggable = false; });
+    $$('#bili-list .bili-card').forEach(c => { c.draggable = false; });
   });
   $$('#bili-mode-seg button').forEach(b => b.addEventListener('click', () => {
     settings.biliBgmMode = b.dataset.mode;
@@ -1383,6 +1468,12 @@
     settings.biliBgmOn = e.target.checked;
     saveSettings();
     if (settings.sound) sfx.select();
+  });
+  $('#set-bili-vol').addEventListener('input', (e) => {
+    const v = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+    settings.biliBgmVolume = v;
+    $('#set-bili-vol-val').textContent = String(v);
+    saveSettings();
   });
   $('#set-replay').addEventListener('click', () => {
     closeModal('modal-settings');
