@@ -1346,7 +1346,7 @@
 
     const refreshLabel = () => {
       const L = biliLabelText(card._data);
-      labelBtn.textContent = L.empty ? '未设置链接 · 点击三杠编辑' : L.text;
+      labelBtn.textContent = L.empty ? '未设置链接 · 点击左侧图标编辑' : L.text;
       labelBtn.classList.toggle('is-empty', L.empty);
     };
     const refreshSeg = () => {
@@ -1367,14 +1367,17 @@
     });
     labelBtn.addEventListener('click', () => setExpanded(editPanel.hidden));
 
-    /* 编辑即保存；最后一张卡片填入有效链接后自动追加新卡片 */
+    /* 编辑即保存；任何卡片填入有效链接后，若列表中没有空白栏则自动追加（上限 10 个） */
     const onInput = () => {
       card._data.name = nameInput.value;
       card._data.url = urlInput.value;
       refreshLabel();
-      const cards = $$('#bili-list .bili-card');
-      if (card === cards[cards.length - 1] && parseBiliId(urlInput.value)) {
-        $('#bili-list').appendChild(makeBiliCard({ name: '', url: '', show: 'name' }));
+      if (parseBiliId(urlInput.value)) {
+        const cards = $$('#bili-list .bili-card');
+        const hasEmpty = cards.some(c => !parseBiliId($('.bili-edit__url', c).value));
+        if (!hasEmpty && cards.length < 10) {
+          $('#bili-list').appendChild(makeBiliCard({ name: '', url: '', show: 'name' }));
+        }
       }
       saveBiliList();
     };
