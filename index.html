@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
@@ -6,7 +6,7 @@
 <title>behuman · 成为人类吧！</title>
 <meta name="description" content="behuman 是一款剧情化专注自习网站：帮助流落地球的外星人在变回原型时躲过人群，用每一次专注换取留在地球的资格。" />
 <link rel="icon" href="assets/avatar.svg" />
-<link rel="stylesheet" href="css/style.css?v=2.31" />
+<link rel="stylesheet" href="css/style.css?v=2.45" />
 </head>
 <body>
 
@@ -77,30 +77,16 @@
         <span class="menu-item__arrow">›</span>
       </button>
 
-      <button class="menu-item" id="btn-save" type="button">
+      <button class="menu-item" id="btn-bedroom" type="button">
         <span class="menu-item__icon">
           <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true">
-            <path d="M5 4h11l3 3v13a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-            <path d="M8 4v5h7V4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-            <rect x="8" y="12" width="8" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M3 10.5L12 4l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1v-9.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+            <path d="M9 21v-6h6v6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+            <path d="M7 8.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
           </svg>
         </span>
         <span class="menu-item__text">
-          <strong>存档</strong>
-        </span>
-        <span class="menu-item__arrow">›</span>
-      </button>
-
-      <button class="menu-item" id="btn-load" type="button">
-        <span class="menu-item__icon">
-          <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true">
-            <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-            <path d="M8 13l-2.5 2.5L8 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M12 17.5H5.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-          </svg>
-        </span>
-        <span class="menu-item__text">
-          <strong>读档</strong>
+          <strong>回到卧室</strong>
         </span>
         <span class="menu-item__arrow">›</span>
       </button>
@@ -199,6 +185,10 @@
 <!-- ============ 专注：进行中 ============ -->
 <div id="focus-running" class="focus-run" hidden>
   <img class="focus-run__bg" src="assets/scene5.svg" alt="" />
+  <picture class="focus-run__room">
+    <source media="(max-width: 560px)" srcset="assets/rest-room-mobile.svg" />
+    <img src="assets/rest-room.svg" alt="" />
+  </picture>
   <div class="focus-run__mask"></div>
   <audio id="focus-audio" loop preload="auto"></audio>
   <audio id="sfx-footsteps" src="assets/footsteps.m4a" preload="auto"></audio>
@@ -223,7 +213,7 @@
       <i></i><i></i><i></i>
     </div>
     <div class="focus-run__break-tips" id="break-tips" hidden>
-      <p>😮‍💨 伪装暂时稳定，去地球人中间放松一下吧。</p>
+      <p>😮‍💨 回到自己的小房间，放松一下吧。</p>
       <p>休息结束，将自动开始下一轮躲藏。</p>
     </div>
     <div class="focus-run__break-actions" id="break-actions" hidden>
@@ -234,6 +224,15 @@
   </div>
 
   <p class="focus-run__credit">下雨天 许可:CC-BY 作者:fanh 来源:<a href="https://www.ear0.com/sound/33826" target="_blank" rel="noopener noreferrer">耳聆网</a></p>
+
+  <button id="bedroom-back" class="bedroom-back" type="button" hidden>回到书桌</button>
+
+  <!-- ★★★【书架入口 · 卧室右上角】按钮结构（配合 style.css .bedroom-shelf、app.js enterBedroom/leaveBedroom/绑定） ★★★ -->
+  <button id="bedroom-shelf" class="bedroom-shelf" type="button" hidden title="书架">
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 4h4a3 3 0 013 3v14H7a3 3 0 01-3-3V4z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M11 21h5a3 3 0 003-3V7a3 3 0 00-3-3h-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M11 8h6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    <span>书架</span>
+  </button>
+  <!-- ★★★【书架入口 · 卧室右上角】结束 ★★★ -->
 
   <div id="focus-warning" class="focus-warning" hidden>
     <div class="focus-warning__box">
@@ -381,9 +380,51 @@
       <button class="btn-ghost btn-ghost--small btn-danger" id="set-clear" type="button">清空数据</button>
     </div>
 
-    <p class="modal__footer">behuman v2.33 · 愿你在地球上，藏得很好。</p>
+    <p class="modal__footer">behuman v2.45 · 愿你在地球上，藏得很好。</p>
   </div>
 </div>
+
+<!-- ============================================================
+     【书架模块 · 弹窗结构】开始
+     翻开的书本弹窗：阅读 / 书写
+     注意：v2.36 起主菜单已移除书架入口，此弹窗保留备用（暂无入口）
+     ============================================================ -->
+<div id="modal-book" class="modal-mask modal-mask--book" hidden>
+  <div class="book-shell" role="dialog" aria-modal="true" aria-label="书架">
+    <button class="modal__close book-close" data-close type="button" aria-label="关闭">×</button>
+    <div class="book" id="book">
+      <div class="book__page book__page--left">
+        <span class="book__head" id="book-head-left"></span>
+        <div class="book__inner" id="book-left"></div>
+      </div>
+      <div class="book__page book__page--right">
+        <span class="book__head" id="book-head-right"></span>
+        <div class="book__inner" id="book-right"></div>
+      </div>
+      <div class="book__flip" id="book-flip" hidden>
+        <div class="book__inner" id="book-flip-inner"></div>
+      </div>
+      <div class="book__note" id="book-note" hidden>
+        <div class="note__head">
+          <span id="note-date"></span>
+          <span id="note-save">自动保存</span>
+        </div>
+        <textarea id="note-text" spellcheck="false" placeholder="在这里写下今天发生的事……"></textarea>
+      </div>
+    </div>
+    <div class="book-bar">
+      <button id="book-prev" type="button">‹ 上一页</button>
+      <span id="book-pageinfo"></span>
+      <button id="book-next" type="button">下一页 ›</button>
+      <button id="book-new" type="button" hidden>＋ 新的一页</button>
+      <button id="book-back" type="button" hidden>返回</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     【书架模块 · 弹窗结构】结束
+     ============================================================ -->
 
 <!-- ============ 意见反馈 ============ -->
 <div id="modal-feedback" class="modal-mask" hidden>
@@ -442,7 +483,8 @@
 <!-- 全局轻提示 -->
 <div id="toast" class="toast" hidden></div>
 
-<script src="js/story.js?v=2.26"></script>
-<script src="js/app.js?v=2.33"></script>
+<script src="js/story.js?v=2.45"></script>
+<script src="js/articles.js?v=2.45"></script>
+<script src="js/app.js?v=2.45"></script>
 </body>
 </html>
