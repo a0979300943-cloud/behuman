@@ -38,7 +38,8 @@
     slots: 'bh.slots',
     settings: 'bh.settings',
     intro: 'bh.intro',
-    feedback: 'bh.feedback'
+    feedback: 'bh.feedback',
+    notes: 'bh.notes'
   };
 
   /* ---------------- 媒体文件存储（IndexedDB，存 Blob，容量大） ----------------
@@ -173,6 +174,7 @@
     slots = store.get(KEY.slots, { 1: null, 2: null, 3: null });
     renderStats();
     if (typeof syncSettingsUI === 'function') syncSettingsUI();
+    if (typeof bookOnAccountChanged === 'function') bookOnAccountChanged();
     renderAccountUI();
   }
   function renderAccountUI() {
@@ -941,7 +943,7 @@
 
     const run = $('#focus-running');
     run.classList.add('is-break');
-    $('#focus-status').textContent = '伪装暂时稳定 · 休息时间';
+    $('#focus-status').textContent = '伪装稳定 · 回房间休息';
     $('#focus-round').textContent = '第 ' + focus.round + ' 轮躲藏完成';
     $('#focus-meter-label').textContent = '休息剩余';
     $('#focus-bar').style.width = '100%';
@@ -952,6 +954,39 @@
     $('#focus-abort').hidden = true;
     document.title = '☕ 休息中 ' + fmtTime(focus.breakMs) + ' · behuman';
     sfx.select();
+  }
+
+  /* 回到卧室：只看房间，不跑计时、不播提示与音效 */
+  function enterBedroom() {
+    if (focus.running) return;
+    clearInterval(focus.timer);
+    clearInterval(focus.statusTimer);
+    stopStatusSfx();
+    focus.phase = 'bedroom';
+    document.title = '卧室 · behuman';
+
+    const run = $('#focus-running');
+    run.hidden = false;
+    run.classList.add('is-break', 'is-bedroom');
+    requestAnimationFrame(() => run.classList.add('show'));
+
+    $('#focus-warning').hidden = true;
+    $('#focus-bgm').hidden = true;
+    $('#bedroom-back').hidden = false;
+    $('#bedroom-shelf').hidden = false;  /* ★★★【书架入口 · 卧室右上角】进入卧室时显示 ★★★ */
+  }
+
+  function leaveBedroom() {
+    if (focus.phase !== 'bedroom') return;
+    focus.phase = 'idle';
+    document.title = 'behuman · 成为人类吧！';
+    const run = $('#focus-running');
+    run.classList.remove('show', 'is-break', 'is-bedroom');
+    $('#bedroom-back').hidden = true;
+    $('#bedroom-shelf').hidden = true;  /* ★★★【书架入口 · 卧室右上角】离开卧室时隐藏 ★★★ */
+    setTimeout(() => {
+      if (focus.phase === 'idle') run.hidden = true;
+    }, 300);
   }
 
   function tick() {
@@ -1577,10 +1612,375 @@
     }
   });
 
+  /* ****************************************************************
+   * ★★★【书架模块】开始★★★
+   * 书架渲染 / 翻开的书本弹窗（阅读·研究笔记）/ 文章分页翻页 / 日记随笔
+   * 配套：index.html「【书架模块 · 弹窗结构】」
+   *       css/style.css「【书架模块】」
+   *       js/articles.js（文章正文数据源 window.BH_ARTICLES）
+   * 注意：v2.36 起主菜单已移除书架入口，本模块保留备用
+   * **************************************************************** */
+  const BOOK_ARTICLES = Array.isArray(window.BH_ARTICLES) ? window.BH_ARTICLES : [];
+  const BOOK_COLORS = ['#7d3a30', '#2f5a5e', '#5c4877', '#8a6224', '#36507a', '#6a3d52'];
+  const bookState = {
+    view: 'menu',        // menu | list | reader | notebook
+    article: null,
+    pages: [],
+    spread: 0,
+    notes: [],
+    noteIdx: 0,
+    flipping: false
+  };
+  let noteSaveTimer = null;
+  let bookResizeTimer = null;
+
+  function escHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  }
+  const isNarrowBook = () => window.matchMedia('(max-width: 760px)').matches;
+
+  /* ---------- 书架外观 ---------- */
+  function renderShelf() {
+    const box = $('#shelf-books');
+    if (!box) return;
+    let html = '';
+    BOOK_ARTICLES.forEach((a, i) => {
+      const h = 58 + ((i * 17) % 30);
+      html += '<button class="book-spine" type="button" data-book="' + i +
+        '" style="--spine:' + BOOK_COLORS[i % BOOK_COLORS.length] + ';--h:' + h + 'px" title="' +
+        escHtml(a.title) + '"><span>' + escHtml(a.title) + '</span></button>';
+    });
+    html += '<button class="book-spine book-spine--note" type="button" data-book="note"' +
+      ' style="--spine:#1f5f6b;--h:78px" title="日记 · 随笔"><span>日记 · 随笔</span></button>';
+    box.innerHTML = html;
+  }
+
+  /* ---------- 书本通用 ---------- */
+  function setBookHeads(left, right) {
+    $('#book-head-left').textContent = left || '';
+    $('#book-head-right').textContent = right || '';
+  }
+  function setNoteMode(on) {
+    $('#book').classList.toggle('book--note', on);
+    $('#book-note').hidden = !on;
+    if (on) {
+      $('#book-left').innerHTML = '';
+      $('#book-right').innerHTML = '';
+    }
+  }
+  function setBar(o) {
+    const prev = $('#book-prev'), next = $('#book-next'), info = $('#book-pageinfo');
+    const back = $('#book-back'), add = $('#book-new');
+    prev.hidden = !o.nav; next.hidden = !o.nav;
+    prev.disabled = !!(o.nav && o.prevDisabled);
+    next.disabled = !!(o.nav && o.nextDisabled);
+    info.hidden = !o.info;
+    info.textContent = o.info || '';
+    back.hidden = !o.back;
+    add.hidden = !o.add;
+  }
+
+  /* ---------- 打开 / 封面（阅读与书写） ---------- */
+  function openBook() {
+    bookState.flipping = false;
+    renderBookMenu();
+    openModal('modal-book');
+  }
+  function renderBookMenu() {
+    bookState.view = 'menu';
+    setNoteMode(false);
+    setBookHeads('', '');
+    $('#book-left').innerHTML =
+      '<div class="book-cover">' +
+        '<p class="book-cover__kicker">书 架</p>' +
+        '<h3 class="book-cover__title">躲藏者手记</h3>' +
+        '<p class="book-cover__quote">来都来了，研究（人类）还是有必要的......</p>' +
+        '<span class="book-cover__meta">BE&nbsp;HUMAN&nbsp;·&nbsp;读&nbsp;/&nbsp;写</span>' +
+      '</div>';
+    $('#book-right').innerHTML =
+      '<div class="book-choice-wrap">' +
+        '<button class="book-choice" type="button" data-choice="read">' +
+          '<strong>阅读</strong><small>翻开已收入书架的文章</small></button>' +
+        '<button class="book-choice" type="button" data-choice="write">' +
+          '<strong>研究笔记</strong><small>在横线本上记下今天</small></button>' +
+      '</div>';
+    setBar({ nav: false, back: false });
+  }
+
+  /* ---------- 文章目录 ---------- */
+  function renderArticleList() {
+    bookState.view = 'list';
+    setNoteMode(false);
+    setBookHeads('', '');
+    const count = BOOK_ARTICLES.length;
+    $('#book-left').innerHTML =
+      '<div class="book-cover">' +
+        '<p class="book-cover__kicker">阅 读</p>' +
+        '<h3 class="book-cover__title">奇怪的书籍</h3>' +
+        '<p class="book-cover__quote">这里似乎有一些地球上从未出现过的书。</p>' +
+      '</div>';
+    if (!count) {
+      $('#book-right').innerHTML =
+        '<p class="book-list__empty">书架里还没有文章。<br/>把 Word 文档放进「素材 / 文章」后，<br/>重新生成文章数据即可。</p>';
+    } else {
+      let html = '<div class="book-list">';
+      BOOK_ARTICLES.forEach((a, i) => {
+        const len = (a.paragraphs || []).join('').replace(/\s/g, '').length;
+        html += '<button class="book-list__item" type="button" data-article="' + i + '">' +
+          '<strong>' + escHtml(a.title) + '</strong><small>' + len + ' 字</small></button>';
+      });
+      html += '</div>';
+      $('#book-right').innerHTML = html;
+    }
+    setBar({ nav: false, back: true });
+  }
+
+  /* ---------- 阅读：分页 ---------- */
+  function splitBlocks(article) {
+    const out = [];
+    (article.paragraphs || []).forEach(p => {
+      const text = String(p || '').replace(/\r/g, '').trim();
+      if (!text) { out.push(''); return; }
+      const parts = text.match(/[^。！？；!?;]+[。！？；!?;]?/g) || [text];
+      parts.forEach(s => { s = s.trim(); if (s) out.push(s); });
+    });
+    return out;
+  }
+  function paginateArticle(article) {
+    const el = $('#book-right');
+    el.innerHTML = '';
+    const maxH = el.clientHeight || 400;
+    const blocks = splitBlocks(article);
+    const pages = [];
+    let cur = [];
+    const renderCur = () => {
+      el.innerHTML = cur.map(t => t
+        ? '<p class="book-p">' + escHtml(t) + '</p>'
+        : '<p class="book-p book-p--empty">&#8203;</p>').join('');
+    };
+    let i = 0;
+    while (i < blocks.length) {
+      cur.push(blocks[i]);
+      renderCur();
+      if (el.scrollHeight <= maxH) { i++; continue; }
+      cur.pop();
+      renderCur();
+      if (cur.length) { pages.push(cur); cur = []; continue; }
+      /* 单个段落超过一页：按字符拆分 */
+      let rest = blocks[i] || ' ';
+      while (rest.length) {
+        let lo = 1, hi = rest.length, best = 1;
+        while (lo <= hi) {
+          const mid = (lo + hi) >> 1;
+          el.innerHTML = '<p class="book-p">' + escHtml(rest.slice(0, mid)) + '</p>';
+          if (el.scrollHeight <= maxH) { best = mid; lo = mid + 1; } else { hi = mid - 1; }
+        }
+        const head = rest.slice(0, best);
+        rest = rest.slice(best);
+        if (rest) pages.push([head]); else cur = [head];
+      }
+      i++;
+    }
+    if (cur.length) pages.push(cur);
+    el.innerHTML = '';
+    return pages.length ? pages : [['']];
+  }
+  function openReader(idx) {
+    const a = BOOK_ARTICLES[idx];
+    if (!a) return;
+    bookState.view = 'reader';
+    bookState.article = a;
+    bookState.spread = 0;
+    setNoteMode(false);
+    setBookHeads(a.title, a.title);
+    bookState.pages = paginateArticle(a);
+    renderReader();
+  }
+  function renderReader() {
+    const narrow = isNarrowBook();
+    const per = narrow ? 1 : 2;
+    const start = bookState.spread * per;
+    const pageHTML = pg => (pg || []).map(t => t
+      ? '<p class="book-p">' + escHtml(t) + '</p>'
+      : '<p class="book-p book-p--empty">&#8203;</p>').join('');
+    $('#book-left').innerHTML = narrow ? '' : pageHTML(bookState.pages[start]);
+    $('#book-right').innerHTML = pageHTML(bookState.pages[narrow ? start : start + 1]);
+    const total = bookState.pages.length;
+    const spreadCount = Math.ceil(total / per);
+    const a = start + 1, b = Math.min(start + per, total);
+    setBar({
+      nav: true,
+      back: true,
+      prevDisabled: bookState.spread <= 0,
+      nextDisabled: bookState.spread >= spreadCount - 1,
+      info: '第 ' + a + (b > a ? '–' + b : '') + ' 页 / 共 ' + total + ' 页'
+    });
+  }
+  function turnBook(dir) {
+    if (bookState.view !== 'reader' || bookState.flipping) return;
+    const narrow = isNarrowBook();
+    const per = narrow ? 1 : 2;
+    const spreadCount = Math.ceil(bookState.pages.length / per);
+    if (dir > 0 && bookState.spread >= spreadCount - 1) return;
+    if (dir < 0 && bookState.spread <= 0) return;
+    const flip = $('#book-flip');
+    const inner = $('#book-flip-inner');
+    const useRight = dir > 0 || narrow;
+    inner.innerHTML = $(useRight ? '#book-right' : '#book-left').innerHTML;
+    flip.className = 'book__flip ' + (useRight ? 'is-right' : 'is-left');
+    flip.hidden = false;
+    flip.style.animation = 'none';
+    void flip.offsetWidth;
+    flip.style.animation = (dir > 0 ? 'pageTurnNext' : 'pageTurnPrev') + ' 0.62s ease-in-out forwards';
+    bookState.flipping = true;
+    bookState.spread += dir;
+    renderReader();
+    setTimeout(() => {
+      flip.hidden = true;
+      flip.style.animation = '';
+      flip.className = 'book__flip';
+      bookState.flipping = false;
+    }, 640);
+  }
+
+  /* ---------- 书写：横线笔记本 ---------- */
+  function loadNotes() {
+    const raw = store.get(KEY.notes, []);
+    bookState.notes = Array.isArray(raw)
+      ? raw.filter(n => n && typeof n === 'object' && typeof n.text === 'string')
+      : [];
+  }
+  function saveNotes() { store.set(KEY.notes, bookState.notes); }
+  function newNote() {
+    return {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      date: today(),
+      text: '',
+      updatedAt: new Date().toISOString()
+    };
+  }
+  function renderNotebook() {
+    bookState.view = 'notebook';
+    setNoteMode(true);
+    loadNotes();
+    if (!bookState.notes.length) {
+      bookState.notes.push(newNote());
+      saveNotes();
+    }
+    bookState.noteIdx = bookState.notes.length - 1;
+    renderNotePage();
+  }
+  function renderNotePage() {
+    const n = bookState.notes[bookState.noteIdx];
+    if (!n) return;
+    setBookHeads('', '');
+    $('#note-date').textContent = n.date || '';
+    $('#note-text').value = n.text || '';
+    $('#note-save').textContent = '自动保存';
+    setBar({
+      nav: true,
+      back: true,
+      add: true,
+      prevDisabled: bookState.noteIdx <= 0,
+      nextDisabled: bookState.noteIdx >= bookState.notes.length - 1,
+      info: '第 ' + (bookState.noteIdx + 1) + ' / ' + bookState.notes.length + ' 篇'
+    });
+    setTimeout(() => {
+      if (bookState.view === 'notebook') $('#note-text').focus();
+    }, 60);
+  }
+  function moveNote(dir) {
+    const i = bookState.noteIdx + dir;
+    if (i < 0 || i >= bookState.notes.length) return;
+    bookState.noteIdx = i;
+    renderNotePage();
+  }
+  function addNote() {
+    const cur = bookState.notes[bookState.noteIdx];
+    if (cur && !cur.text.trim()) {
+      $('#note-text').focus();
+      toast('这一页还是空的，先写点什么吧');
+      return;
+    }
+    bookState.notes.push(newNote());
+    saveNotes();
+    bookState.noteIdx = bookState.notes.length - 1;
+    renderNotePage();
+    sfx.select();
+  }
+  function bookOnAccountChanged() {
+    bookState.notes = [];
+    bookState.noteIdx = 0;
+  }
+
+  /* ---------- 事件绑定 ---------- */
+  $('#modal-book').addEventListener('click', (e) => {
+    const choice = e.target.closest('[data-choice]');
+    if (choice) {
+      if (choice.dataset.choice === 'read') renderArticleList();
+      else renderNotebook();
+      return;
+    }
+    const item = e.target.closest('[data-article]');
+    if (item) openReader(Number(item.dataset.article));
+  });
+  $('#book-prev').addEventListener('click', () => {
+    if (bookState.view === 'reader') turnBook(-1);
+    else if (bookState.view === 'notebook') moveNote(-1);
+  });
+  $('#book-next').addEventListener('click', () => {
+    if (bookState.view === 'reader') turnBook(1);
+    else if (bookState.view === 'notebook') moveNote(1);
+  });
+  $('#book-back').addEventListener('click', () => renderBookMenu());
+  $('#book-new').addEventListener('click', addNote);
+  $('#note-text').addEventListener('input', (e) => {
+    const n = bookState.notes[bookState.noteIdx];
+    if (!n) return;
+    n.text = e.target.value;
+    n.updatedAt = new Date().toISOString();
+    $('#note-save').textContent = '正在保存…';
+    clearTimeout(noteSaveTimer);
+    noteSaveTimer = setTimeout(() => {
+      saveNotes();
+      $('#note-save').textContent = '已保存';
+    }, 350);
+  });
+  $('#note-text').addEventListener('blur', () => {
+    clearTimeout(noteSaveTimer);
+    saveNotes();
+    $('#note-save').textContent = '已保存';
+  });
+  $('.book-close').addEventListener('click', () => {
+    clearTimeout(noteSaveTimer);
+    if (bookState.view === 'notebook') saveNotes();
+  });
+  window.addEventListener('resize', () => {
+    if (bookState.view !== 'reader') return;
+    clearTimeout(bookResizeTimer);
+    bookResizeTimer = setTimeout(() => {
+      const a = bookState.article;
+      if (!a) return;
+      const per = isNarrowBook() ? 1 : 2;
+      const startPage = bookState.spread * per;
+      bookState.pages = paginateArticle(a);
+      bookState.spread = Math.max(0, Math.min(
+        Math.floor(startPage / per),
+        Math.ceil(bookState.pages.length / per) - 1
+      ));
+      renderReader();
+    }, 220);
+  });
+
+  /* ★★★【书架模块】结束★★★ */
+
   /* ---------------- 入口绑定 ---------------- */
   $('#btn-focus').addEventListener('click', () => { resetDurationUI(); openModal('focus-setup'); });
-  $('#btn-save').addEventListener('click', () => { renderSaveSlots(); openModal('modal-save'); });
-  $('#btn-load').addEventListener('click', () => { renderLoadSlots(); openModal('modal-load'); });
+  $('#btn-bedroom').addEventListener('click', enterBedroom);
+  $('#bedroom-back').addEventListener('click', leaveBedroom);
+  $('#bedroom-shelf').addEventListener('click', openBook);  /* ★★★【书架入口 · 卧室右上角】事件绑定 → 打开书本弹窗 ★★★ */
   $('#btn-settings').addEventListener('click', () => { syncSettingsUI(); openModal('modal-settings'); });
   $('#btn-feedback').addEventListener('click', () => openModal('modal-feedback'));
 
