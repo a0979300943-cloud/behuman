@@ -1,12 +1,18 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>behuman · 成为人类吧！</title>
 <meta name="description" content="behuman 是一款剧情化专注自习网站：帮助流落地球的外星人在变回原型时躲过人群，用每一次专注换取留在地球的资格。" />
+<meta name="theme-color" content="#04060f" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="behuman · 成为人类吧！" />
+<meta property="og:description" content="剧情化专注自习：伪装成人类，用每一次专注换取留在地球的资格。" />
+<meta property="og:url" content="https://behuman-108ad6.surge.sh/" />
+<meta name="twitter:card" content="summary_large_image" />
 <link rel="icon" href="assets/avatar.svg" />
-<link rel="stylesheet" href="css/style.css?v=2.45" />
+<link rel="stylesheet" href="css/style.css?v=2.49" />
 </head>
 <body>
 
@@ -45,17 +51,10 @@
       <span>behuman</span>
     </div>
     <div class="topbar__account">
-      <button id="btn-account" class="icon-btn" type="button" title="登录 / 注册" aria-label="登录或注册">
-        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-          <circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/>
-          <path d="M4.5 20c.8-3.6 3.8-5.5 7.5-5.5s6.7 1.9 7.5 5.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-        </svg>
-        <span id="account-label">登录/注册</span>
+      <button id="btn-account" class="icon-btn account-btn" type="button" title="个人档案" aria-label="打开个人档案">
+        <span id="topbar-avatar" class="topbar__avatar" aria-hidden="true"></span>
+        <span id="account-label">游客</span>
       </button>
-      <div id="account-menu" class="account-menu" hidden>
-        <div class="account-menu__name" id="account-menu-name"></div>
-        <button id="btn-logout" type="button">退出登录</button>
-      </div>
     </div>
   </header>
 
@@ -190,17 +189,17 @@
     <img src="assets/rest-room.svg" alt="" />
   </picture>
   <div class="focus-run__mask"></div>
-  <audio id="focus-audio" loop preload="auto"></audio>
-  <audio id="sfx-footsteps" src="assets/footsteps.m4a" preload="auto"></audio>
-  <audio id="sfx-talking" src="assets/talking.m4a" preload="auto"></audio>
-  <audio id="sfx-rain" src="assets/rain.m4a?v=2.27" loop preload="auto"></audio>
+  <audio id="focus-audio" loop preload="none"></audio>
+  <audio id="sfx-footsteps" src="assets/footsteps.m4a?v=2.49" preload="none"></audio>
+  <audio id="sfx-talking" src="assets/talking.m4a?v=2.49" preload="none"></audio>
+  <audio id="sfx-rain" src="assets/rain.m4a?v=2.49" loop preload="none"></audio>
     <div id="focus-bili" class="focus-bili" aria-hidden="true"></div>
-  <button id="focus-bgm" class="focus-bgm" type="button" title="背景音乐开关" hidden>🎵</button>
+  <button id="focus-bgm" class="focus-bgm" type="button" title="背景音乐开关" aria-label="背景音乐开关" hidden>🎵</button>
 
   <div class="focus-run__panel">
-    <p class="focus-run__status" id="focus-status">正在屏住呼吸…</p>
+    <p class="focus-run__status" id="focus-status" aria-live="polite">正在屏住呼吸…</p>
     <p class="focus-run__round" id="focus-round" hidden></p>
-    <div class="focus-run__timer" id="focus-timer">25:00</div>
+    <div class="focus-run__timer" id="focus-timer" role="timer" aria-live="off">25:00</div>
     <div class="focus-run__meter" id="focus-meter">
       <div class="focus-run__meter-label">
         <span id="focus-meter-label">伪装稳定度</span>
@@ -254,26 +253,6 @@
   </div>
 </div>
 
-<!-- ============ 存档 ============ -->
-<div id="modal-save" class="modal-mask" hidden>
-  <div class="modal" role="dialog" aria-modal="true" aria-label="存档">
-    <button class="modal__close" data-close type="button" aria-label="关闭">×</button>
-    <h2 class="modal__title">写入星轨舱</h2>
-    <p class="modal__desc">选择一个舱位保存当前的地球生活记录，已有记录将被覆盖。</p>
-    <div class="slots" id="save-slots"></div>
-  </div>
-</div>
-
-<!-- ============ 读档 ============ -->
-<div id="modal-load" class="modal-mask" hidden>
-  <div class="modal" role="dialog" aria-modal="true" aria-label="读档">
-    <button class="modal__close" data-close type="button" aria-label="关闭">×</button>
-    <h2 class="modal__title">取回星轨舱</h2>
-    <p class="modal__desc">读取后，当前未保存的记录会被舱位中的记录替换。</p>
-    <div class="slots" id="load-slots"></div>
-  </div>
-</div>
-
 <!-- ============ 设置 ============ -->
 <div id="modal-settings" class="modal-mask" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-label="设置">
@@ -291,6 +270,17 @@
         <option value="45">45 分钟</option>
         <option value="60">60 分钟</option>
       </select>
+    </div>
+
+    <div class="setting-row">
+      <div>
+        <strong>严格模式</strong>
+        <small>开启后离开页面 3 秒即判失败；关闭时按「累计离开 3 分钟」判失败，不再重置计时</small>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="set-strict" />
+        <span class="switch__track"><i></i></span>
+      </label>
     </div>
 
     <div class="setting-row">
@@ -372,15 +362,27 @@
       <button class="btn-ghost btn-ghost--small" id="set-replay" type="button">重新观看剧情</button>
     </div>
 
+    <div class="setting-row setting-row--column">
+      <div>
+        <strong>数据备份</strong>
+        <small>把专注记录、设置、日记与头像导出成 JSON；换设备或清缓存前先导出一份</small>
+      </div>
+      <div class="media-actions">
+        <button class="btn-ghost btn-ghost--small" id="data-export" type="button">导出数据</button>
+        <button class="btn-ghost btn-ghost--small" id="data-import" type="button">导入数据</button>
+        <input type="file" id="data-import-file" accept="application/json,.json" hidden />
+      </div>
+    </div>
+
     <div class="setting-row setting-row--column danger">
       <div>
         <strong>清空全部数据</strong>
-        <small>删除专注记录、存档、设置与剧情观看状态</small>
+        <small>删除专注记录、设置与剧情观看状态</small>
       </div>
       <button class="btn-ghost btn-ghost--small btn-danger" id="set-clear" type="button">清空数据</button>
     </div>
 
-    <p class="modal__footer">behuman v2.45 · 愿你在地球上，藏得很好。</p>
+    <p class="modal__footer">behuman v2.49 · 愿你在地球上，藏得很好。</p>
   </div>
 </div>
 
@@ -453,7 +455,7 @@
   <div class="modal modal--narrow" role="dialog" aria-modal="true" aria-label="登录或注册">
     <button class="modal__close" data-close type="button" aria-label="关闭">×</button>
     <h2 class="modal__title">星轨身份认证</h2>
-    <p class="modal__desc">注册一个专属身份代号，你的专注记录、舱位存档将与他人分开保存。</p>
+    <p class="modal__desc">注册一个专属身份代号，你的专注记录与设置将与他人分开保存。</p>
 
     <div class="auth-tabs" role="tablist">
       <button id="auth-tab-login" class="active" type="button" role="tab">登录</button>
@@ -480,11 +482,88 @@
   </div>
 </div>
 
-<!-- 全局轻提示 -->
-<div id="toast" class="toast" hidden></div>
+<!-- ============ 个人档案 ============ -->
+<div id="modal-profile" class="modal-mask" hidden>
+  <div class="modal modal--profile" role="dialog" aria-modal="true" aria-labelledby="profile-title">
+    <button class="modal__close" data-close type="button" aria-label="关闭">×</button>
 
-<script src="js/story.js?v=2.45"></script>
-<script src="js/articles.js?v=2.45"></script>
-<script src="js/app.js?v=2.45"></script>
+    <div class="profile-head">
+      <button type="button" id="profile-avatar-btn" class="profile-avatar profile-avatar--btn" aria-label="设置头像" title="设置头像">
+        <span id="profile-avatar" class="profile-avatar__inner" aria-hidden="true"></span>
+      </button>
+      <div class="profile-id">
+        <h2 class="profile-name" id="profile-title">游客</h2>
+        <p class="profile-sub" id="profile-sub">数据只保存在这台设备</p>
+      </div>
+    </div>
+
+    <div class="profile-stats" id="profile-stats"></div>
+
+    <section class="profile-week" aria-labelledby="profile-week-title">
+      <div class="profile-week__head">
+        <strong id="profile-week-title">近一周专注概况</strong>
+        <span id="profile-week-sum"></span>
+      </div>
+      <div class="profile-chart" id="profile-chart"></div>
+    </section>
+
+    <section class="profile-log" aria-labelledby="profile-log-title">
+      <div class="profile-week__head">
+        <strong id="profile-log-title">最近躲藏</strong>
+        <span id="profile-log-sum"></span>
+      </div>
+      <div class="profile-log__list" id="profile-log-list"></div>
+      <div class="profile-log__add">
+        <input type="number" id="profile-log-min" min="1" max="600" inputmode="numeric" placeholder="分钟" aria-label="补录分钟数" />
+        <button class="btn-ghost btn-ghost--small" id="profile-log-add" type="button">补录一次</button>
+      </div>
+    </section>
+
+    <div class="profile-actions">
+      <button id="profile-auth" class="btn-primary" type="button">登录 / 注册</button>
+      <button id="profile-logout" class="btn-ghost" type="button">退出登录</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 头像设置 ============ -->
+<div id="modal-avatar" class="modal-mask" hidden>
+  <div class="modal modal--narrow" role="dialog" aria-modal="true" aria-labelledby="avatar-title">
+    <button class="modal__close" data-close type="button" aria-label="关闭">×</button>
+    <h2 class="modal__title" id="avatar-title">头像设置</h2>
+    <p class="modal__desc">挑一个预设，或者从电脑里选一张图片。</p>
+
+    <div class="avatar-preview" id="avatar-preview"></div>
+
+    <p class="duration-label">预设头像</p>
+    <div class="avatar-row" id="avatar-row" role="group" aria-label="选择预设头像"></div>
+
+    <div class="avatar-import">
+      <button class="btn-ghost" id="avatar-upload-btn" type="button">从电脑选择图片</button>
+      <button class="btn-ghost btn-ghost--small" id="avatar-reset-btn" type="button" hidden>恢复预设</button>
+    </div>
+    <p class="avatar-hint">支持 JPG / PNG / WebP，会自动裁成正方形并压缩后保存在本机浏览器。</p>
+    <input type="file" id="avatar-file" accept="image/png,image/jpeg,image/webp" hidden />
+  </div>
+</div>
+
+<!-- ============ 断线恢复 ============ -->
+<div id="modal-resume" class="modal-mask" hidden>
+  <div class="modal modal--narrow" role="dialog" aria-modal="true" aria-labelledby="resume-title">
+    <h2 class="modal__title" id="resume-title">上次的躲藏还没结束</h2>
+    <p class="modal__desc" id="resume-text"></p>
+    <div class="resume-actions">
+      <button id="resume-continue" class="btn-primary" type="button">继续躲藏</button>
+      <button id="resume-discard" class="btn-ghost" type="button">放弃这次</button>
+    </div>
+  </div>
+</div>
+
+<!-- 全局轻提示 -->
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="js/story.js?v=2.49"></script>
+<script src="js/articles.js?v=2.49"></script>
+<script src="js/app.js?v=2.49"></script>
 </body>
 </html>
