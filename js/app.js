@@ -35,11 +35,24 @@
 
   const KEY = {
     state: 'bh.state',
-    slots: 'bh.slots',
     settings: 'bh.settings',
     intro: 'bh.intro',
     feedback: 'bh.feedback',
-    notes: 'bh.notes'
+    notes: 'bh.notes',
+    profile: 'bh.profile',
+    live: 'bh.live'
+  };
+
+  /* 默认设置：清空数据、导入、首次启动都复用这一份，避免字段缺失 */
+  const SETTINGS_DEFAULT = {
+    defaultMin: 25,
+    sound: true,
+    strictMode: false,
+    defaultWhiteNoise: true,
+    rainVolume: 50,
+    biliBgmOn: true,
+    biliBgmMode: 'seq',
+    biliBgmVolume: 100
   };
 
   /* ---------------- 媒体文件存储（IndexedDB，存 Blob，容量大） ----------------
@@ -124,17 +137,20 @@
     sessions: 0,
     success: 0,
     failed: 0,
+    interruptions: 0,
     longestMinutes: 0,
-    days: []
+    days: [],
+    daily: {},
+    history: []
   });
 
   let state = Object.assign(freshState(), store.get(KEY.state, {}));
-  let settings = Object.assign({ defaultMin: 25, sound: true, defaultWhiteNoise: true, rainVolume: 50, biliBgmOn: true, biliBgmMode: 'seq', biliBgmVolume: 100 }, store.get(KEY.settings, {}));
-  let slots = store.get(KEY.slots, { 1: null, 2: null, 3: null });
+  if (!state.daily || typeof state.daily !== 'object') state.daily = {};
+  if (!Array.isArray(state.history)) state.history = [];
+  let settings = Object.assign({}, SETTINGS_DEFAULT, store.get(KEY.settings, {}));
 
   const saveState = () => store.set(KEY.state, state);
   const saveSettings = () => store.set(KEY.settings, settings);
-  const saveSlots = () => store.set(KEY.slots, slots);
 
   /* ---------------- 账号模块（纯本地，无后端） ----------------
    * 账号表：bh.accounts = { 代号: { salt, hash, createdAt } }
@@ -157,12 +173,13 @@
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  /* 注册时把游客的文本数据复制到新账号空间（无缝继承本机旧记录） */
+  /* 注册时把游客的文本数据复制到新账号空间（无缝继承本机旧记录）
+   * 注意：读取用 keyFor('bh.state') → 'bh.u.<user>.state'，写入必须同一形式 */
   function copyGuestDataToAccount(user) {
     Object.keys(KEY).forEach(k => {
       try {
         const raw = localStorage.getItem(KEY[k]);
-        if (raw != null) localStorage.setItem('bh.u.' + user + '.' + k, raw);
+        if (raw != null) localStorage.setItem(k.replace(/^bh\./, 'bh.u.' + user + '.'), raw);
       } catch (e) {}
     });
   }
@@ -170,17 +187,19 @@
   /* 切换身份后重新载入内存数据并刷新界面 */
   function afterAccountChanged() {
     state = Object.assign(freshState(), store.get(KEY.state, {}));
-    settings = Object.assign({ defaultMin: 25, sound: true, defaultWhiteNoise: true, rainVolume: 50, biliBgmOn: true, biliBgmMode: 'seq', biliBgmVolume: 100 }, store.get(KEY.settings, {}));
-    slots = store.get(KEY.slots, { 1: null, 2: null, 3: null });
+    if (!state.daily || typeof state.daily !== 'object') state.daily = {};
+    if (!Array.isArray(state.history)) state.history = [];
+    settings = Object.assign({}, SETTINGS_DEFAULT, store.get(KEY.settings, {}));
     renderStats();
     if (typeof syncSettingsUI === 'function') syncSettingsUI();
     if (typeof bookOnAccountChanged === 'function') bookOnAccountChanged();
     renderAccountUI();
   }
   function renderAccountUI() {
-    $('#account-label').textContent = accountName || '登录/注册';
-    $('#account-menu-name').textContent = accountName ? ('当前身份：' + accountName) : '';
-    $('#btn-logout').hidden = !accountName;
+    $('#account-label').textContent = accountName || '游客';
+    renderAvatar();
+    const profileModal = $('#modal-profile');
+    if (profileModal && !profileModal.hidden) renderProfile();
   }
 
   async function accountRegister(name, pwd) {
@@ -309,13 +328,27 @@
     toastTimer = setTimeout(() => { el.hidden = true; }, 2200);
   }
 
-  /* ---------------- 弹窗通用 ---------------- */
+  /* ---------------- 弹窗通用（含焦点管理） ---------------- */
+  let lastFocusedEl = null;
+  function focusables(root) {
+    return $$('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])', root)
+      .filter(el => el.offsetParent !== null || el === document.activeElement);
+  }
   function openModal(id) {
     const m = $('#' + id);
+    lastFocusedEl = document.activeElement;
     m.hidden = false;
     requestAnimationFrame(() => m.classList.add('show'));
     // 兜底：页面在后台标签等情况下 rAF 可能不触发，确保弹窗最终显示
     setTimeout(() => m.classList.add('show'), 60);
+    setTimeout(() => {
+      const list = focusables(m);
+      const target = m.querySelector('[data-autofocus]') || list[0] || m.querySelector('.modal');
+      if (target) {
+        if (!target.hasAttribute('tabindex') && target.classList.contains('modal')) target.setAttribute('tabindex', '-1');
+        target.focus({ preventScroll: true });
+      }
+    }, 90);
     sfx.select();
   }
   function closeModal(m) {
@@ -323,6 +356,10 @@
     if (!m || m.hidden) return;
     m.classList.remove('show');
     setTimeout(() => { m.hidden = true; }, 250);
+    if (lastFocusedEl && typeof lastFocusedEl.focus === 'function') {
+      try { lastFocusedEl.focus({ preventScroll: true }); } catch (e) {}
+    }
+    lastFocusedEl = null;
   }
   document.addEventListener('click', (e) => {
     const closeBtn = e.target.closest('[data-close]');
@@ -332,6 +369,18 @@
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') $$('.modal-mask.show').forEach(closeModal);
+    if (e.key !== 'Tab') return;
+    const shown = $$('.modal-mask.show');
+    const m = shown[shown.length - 1];
+    if (!m) return;
+    const list = focusables(m);
+    if (!list.length) return;
+    const first = list[0], last = list[list.length - 1];
+    if (e.shiftKey && (document.activeElement === first || !m.contains(document.activeElement))) {
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && (document.activeElement === last || !m.contains(document.activeElement))) {
+      e.preventDefault(); first.focus();
+    }
   });
 
   /* ---------------- 开场剧情播放器 ---------------- */
@@ -553,6 +602,7 @@
     $('#app').hidden = false;
     requestAnimationFrame(() => $('#app').classList.add('app--in'));
     renderStats();
+    setTimeout(checkLiveSession, 700);
   }
 
   /* ---------------- 开始专注 ----------------
@@ -595,7 +645,8 @@
   function stopStatusSfx() {
     if (focus.sfxTimer) { clearTimeout(focus.sfxTimer); focus.sfxTimer = null; }
     if (focus.sfxEl) {
-      try { focus.sfxEl.pause(); focus.sfxEl.currentTime = 0; } catch (e) {}
+      try { focus.sfxEl.pause(); } catch (e) {}
+      try { if (focus.sfxEl.readyState > 0) focus.sfxEl.currentTime = 0; } catch (e) {}
       focus.sfxEl = null;
     }
   }
@@ -606,7 +657,7 @@
     else if (text === '远处传来人类的交谈声…') el = $('#sfx-talking');
     if (!el) return;
     try {
-      el.currentTime = 0;
+      if (el.readyState > 0) el.currentTime = 0;
       el.volume = 0.9;
       const p = el.play();
       if (p && p.catch) p.catch(() => {});
@@ -887,25 +938,36 @@
     beginFocusRound(min);
   }
 
-  function beginFocusRound(min) {
-    focus.phase = 'focus';
-    focus.running = true;
-    focus.round += 1;
-    $('#focus-warning').hidden = true;
-    focus.minutes = min;
-    focus.totalMs = min * 60000;
-    focus.endAt = Date.now() + focus.totalMs;
-    focus.risk = 0;
-    focus.hiddenAt = 0;
-    focus.statusIdx = 0;
+  /* 进行中的专注写入本地，页面被刷新/关掉后还能接上 */
+  function saveLive() {
+    if (!focus.running) return;
+    store.set(KEY.live, {
+      endAt: focus.endAt,
+      totalMs: focus.totalMs,
+      minutes: focus.minutes,
+      phase: focus.phase,
+      continuous: focus.continuous,
+      round: focus.round,
+      totalRounds: focus.totalRounds === Infinity ? 0 : focus.totalRounds,
+      focusMin: focus.focusMin,
+      breakMs: focus.breakMs,
+      cycleMinutes: focus.cycleMinutes,
+      awayTotal: focus.awayTotal || 0,
+      sessionStart: focus.sessionStart || Date.now(),
+      savedAt: Date.now()
+    });
+  }
+  const clearLive = () => store.remove(KEY.live);
 
+  /* 专注界面：只负责把 DOM 画成「正在躲藏」的样子 */
+  function paintFocusRun() {
     const run = $('#focus-running');
     run.hidden = false;
-    run.classList.remove('is-break');
+    run.classList.remove('is-break', 'is-bedroom');
     requestAnimationFrame(() => run.classList.add('show'));
 
     $('#focus-status').hidden = false;
-    $('#focus-status').textContent = focus.statuses[0];
+    $('#focus-status').textContent = focus.statuses[focus.statusIdx] || focus.statuses[0];
     $('#focus-round').hidden = !focus.continuous;
     $('#focus-round').textContent = '第 ' + focus.round + ' 轮躲藏';
     $('#focus-timer').textContent = fmtTime(focus.totalMs);
@@ -918,9 +980,9 @@
     $('#break-actions').hidden = true;
     $('#focus-abort').hidden = false;
     renderRisk();
-    sfx.alarm();
-    document.title = '🛸 专注中 ' + fmtTime(focus.totalMs) + ' · behuman';
+  }
 
+  function startFocusTimers() {
     clearInterval(focus.timer);
     focus.timer = setInterval(tick, 250);
     clearInterval(focus.statusTimer);
@@ -930,8 +992,30 @@
       $('#focus-status').textContent = t;
       playStatusSfx(t);
     }, 22000);
+  }
 
+  function beginFocusRound(min) {
+    focus.phase = 'focus';
+    focus.running = true;
+    focus.round += 1;
+    $('#focus-warning').hidden = true;
+    focus.minutes = min;
+    focus.totalMs = min * 60000;
+    focus.endAt = Date.now() + focus.totalMs;
+    focus.risk = 0;
+    focus.hiddenAt = 0;
+    focus.awayTotal = 0;
+    focus.failReason = '';
+    focus.failing = false;
+    if (focus.round === 1) focus.sessionStart = Date.now();
+    focus.statusIdx = 0;
+
+    paintFocusRun();
+    sfx.alarm();
+    document.title = '🛸 专注中 ' + fmtTime(focus.totalMs) + ' · behuman';
+    startFocusTimers();
     startBgm();
+    saveLive();
   }
 
   function beginBreak() {
@@ -954,6 +1038,7 @@
     $('#focus-abort').hidden = true;
     document.title = '☕ 休息中 ' + fmtTime(focus.breakMs) + ' · behuman';
     sfx.select();
+    saveLive();
   }
 
   /* 回到卧室：只看房间，不跑计时、不播提示与音效 */
@@ -990,6 +1075,7 @@
   }
 
   function tick() {
+    if (focus.failing) return;
     const remain = focus.endAt - Date.now();
     $('#focus-timer').textContent = fmtTime(remain);
     const pct = Math.max(0, remain / focus.totalMs);
@@ -1018,6 +1104,8 @@
     state.sessions = (state.sessions || 0) + 1;
     const t = today();
     if (state.days.indexOf(t) === -1) state.days.push(t);
+    if (!state.daily) state.daily = {};
+    state.daily[t] = (state.daily[t] || 0) + min;
     state.totalMinutes += min;
     state.success = (state.success || 0) + 1;
     state.longestMinutes = Math.max(state.longestMinutes || 0, min);
@@ -1047,11 +1135,13 @@
     const cycleRounds = focus.round;
     const cycleMins = focus.cycleMinutes;
     focus.running = false;
+    focus.failing = false;
     focus.phase = 'idle';
     clearInterval(focus.timer);
     clearInterval(focus.statusTimer);
     stopBgm();
     stopStatusSfx();
+    clearLive();
     document.title = 'behuman · 成为人类吧！';
 
     const run = $('#focus-running');
@@ -1060,10 +1150,20 @@
 
     if (!success) {
       state.failed = (state.failed || 0) + 1;
+      state.interruptions = (state.interruptions || 0) + 1;
       saveState();
       sfx.fail();
     }
     renderStats();
+    const recMins = success ? (wasContinuous ? cycleMins : focus.minutes) : cycleMins;
+    pushHistory({
+      at: Date.now(),
+      mins: recMins,
+      ok: !!success,
+      rounds: cycleRounds,
+      reason: focus.failReason || (aborted ? 'abort' : (success ? 'done' : 'caught'))
+    });
+    focus.failReason = '';
     showResult(success, success ? (wasContinuous ? cycleMins : focus.minutes) : 0, aborted,
       { continuous: wasContinuous, rounds: cycleRounds, cycleMins: cycleMins });
 
@@ -1127,26 +1227,54 @@
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (!focus.running || focus.phase !== 'focus') return;
+    if (!focus.running || focus.phase !== 'focus' || focus.failing) return;
     if (document.hidden) {
       focus.hiddenAt = Date.now();
-    } else if (focus.hiddenAt) {
-      const awaySec = Math.round((Date.now() - focus.hiddenAt) / 1000);
-      focus.hiddenAt = 0;
-      if (awaySec >= 15) {
-        focus.risk += 1;
-        renderRisk();
-        $('#focus-warning-text').innerHTML =
-          '你离开页面 <strong>' + awaySec + '</strong> 秒，巷口的人类差点发现你！<br/>第 ' + focus.risk + ' 次暴露风险（累计 3 次任务失败）。';
-        $('#focus-warning').hidden = false;
-        sfx.alarm();
-        // 风险期间暂停计时
-        focus.endAt += awaySec * 1000;
-        if (focus.risk >= 3) {
-          $('#focus-warning').hidden = true;
-          endFocus(false, false);
-        }
+      return;
+    }
+    if (!focus.hiddenAt) return;
+    const awaySec = Math.max(0, Math.round((Date.now() - focus.hiddenAt) / 1000));
+    focus.hiddenAt = 0;
+    if (!awaySec) return;
+    /* 离开的时间不计入专注，但累计起来用于判定，避免「反复切 14 秒」把计时无限拖长 */
+    focus.awayTotal = (focus.awayTotal || 0) + awaySec;
+    focus.endAt += awaySec * 1000;
+    saveLive();
+
+    const fail = (reason, msg) => {
+      focus.failReason = reason;
+      focus.failing = true;
+      $('#focus-warning-text').innerHTML = msg;
+      $('#focus-warning').hidden = false;
+      sfx.alarm();
+      setTimeout(() => {
+        $('#focus-warning').hidden = true;
+        if (focus.running) endFocus(false, false);
+      }, 900);
+    };
+
+    if (settings.strictMode) {
+      if (awaySec >= 3 || focus.awayTotal >= 10) {
+        fail('strict', '严格模式：你离开了 <strong>' + awaySec + '</strong> 秒（累计 ' + focus.awayTotal + ' 秒），伪装直接失效。');
       }
+      return;
+    }
+
+    if (awaySec >= 15) {
+      focus.risk += 1;
+      renderRisk();
+      $('#focus-warning-text').innerHTML =
+        '你离开页面 <strong>' + awaySec + '</strong> 秒，巷口的人类差点发现你！<br/>第 ' +
+        focus.risk + ' 次暴露风险（累计 3 次任务失败），累计离开 ' + focus.awayTotal + ' 秒。';
+      $('#focus-warning').hidden = false;
+      sfx.alarm();
+      if (focus.risk >= 3) {
+        fail('caught', '第三次暴露风险，伪装彻底失效。');
+        return;
+      }
+    }
+    if (focus.awayTotal >= 180) {
+      fail('away', '你累计离开页面 <strong>' + focus.awayTotal + '</strong> 秒，超过 3 分钟，伪装失效。');
     }
   });
 
@@ -1206,69 +1334,11 @@
   $('#focus-start').addEventListener('click', startFocus);
   $('#result-back').addEventListener('click', () => { closeModal('focus-result'); sfx.select(); });
 
-  /* ---------------- 存档 / 读档 ---------------- */
-  function slotSummary(s) {
-    if (!s) return '';
-    return '居留 ' + (s.state.totalMinutes || 0) + ' 分钟 · 成功 ' + (s.state.success || 0) +
-      ' 次 · 最长 ' + (s.state.longestMinutes || 0) + ' 分钟';
-  }
-
-  function renderSaveSlots() {
-    const box = $('#save-slots');
-    box.innerHTML = '';
-    [1, 2, 3].forEach(i => {
-      const s = slots[i];
-      const card = document.createElement('button');
-      card.type = 'button';
-      card.className = 'slot' + (s ? '' : ' slot--empty');
-      card.innerHTML =
-        '<span class="slot__no">舱位 ' + i + '</span>' +
-        (s
-          ? '<span class="slot__info">' + slotSummary(s) + '</span><span class="slot__time">' + fmtDate(s.savedAt) + '</span><span class="slot__action">覆盖保存</span>'
-          : '<span class="slot__info">空舱位</span><span class="slot__time">——</span><span class="slot__action">写入记录</span>');
-      card.addEventListener('click', () => {
-        if (s && !confirm('覆盖舱位 ' + i + ' 中原有的记录？')) return;
-        slots[i] = { savedAt: new Date().toISOString(), state: JSON.parse(JSON.stringify(state)) };
-        saveSlots();
-        renderSaveSlots();
-        toast('已保存到 ' + i + ' 号星轨舱');
-        sfx.success();
-      });
-      box.appendChild(card);
-    });
-  }
-
-  function renderLoadSlots() {
-    const box = $('#load-slots');
-    box.innerHTML = '';
-    [1, 2, 3].forEach(i => {
-      const s = slots[i];
-      const card = document.createElement('button');
-      card.type = 'button';
-      card.className = 'slot' + (s ? '' : ' slot--empty slot--disabled');
-      card.disabled = !s;
-      card.innerHTML =
-        '<span class="slot__no">舱位 ' + i + '</span>' +
-        (s
-          ? '<span class="slot__info">' + slotSummary(s) + '</span><span class="slot__time">' + fmtDate(s.savedAt) + '</span><span class="slot__action">读取记录</span>'
-          : '<span class="slot__info">空舱位</span><span class="slot__time">——</span><span class="slot__action">暂无记录</span>');
-      if (s) card.addEventListener('click', () => {
-        if (!confirm('读取舱位 ' + i + ' 的记录？当前未保存的进度将被替换。')) return;
-        state = Object.assign(freshState(), JSON.parse(JSON.stringify(s.state)));
-        saveState();
-        renderStats();
-        closeModal('modal-load');
-        toast('已取回 ' + i + ' 号星轨舱的记忆');
-        sfx.success();
-      });
-      box.appendChild(card);
-    });
-  }
-
   /* ---------------- 设置 ---------------- */
   function syncSettingsUI() {
     $('#set-default-min').value = String(settings.defaultMin);
     $('#set-sound').checked = !!settings.sound;
+    $('#set-strict').checked = !!settings.strictMode;
     $('#set-rain').checked = !!settings.defaultWhiteNoise;
     $('#set-rain-vol').value = String(settings.rainVolume);
     $('#set-rain-vol-val').textContent = String(settings.rainVolume);
@@ -1359,6 +1429,10 @@
           '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' +
         '</span>' +
         '<button type="button" class="bili-item__label"></button>' +
+        '<span class="bili-item__move">' +
+          '<button type="button" class="bili-item__up" title="上移" aria-label="上移">↑</button>' +
+          '<button type="button" class="bili-item__down" title="下移" aria-label="下移">↓</button>' +
+        '</span>' +
         '<button type="button" class="bili-item__del" title="移除">×</button>' +
       '</div>' +
       '<div class="bili-edit" hidden>' +
@@ -1437,6 +1511,17 @@
       sfx.select();
     });
 
+    /* 上下移动：触屏与键盘都能用，补足拖拽排序在手机上的缺失 */
+    const moveCard = (dir) => {
+      const sib = dir < 0 ? card.previousElementSibling : card.nextElementSibling;
+      if (!sib) return;
+      if (dir < 0) sib.before(card); else sib.after(card);
+      saveBiliList();
+      sfx.select();
+    };
+    $('.bili-item__up', card).addEventListener('click', () => moveCard(-1));
+    $('.bili-item__down', card).addEventListener('click', () => moveCard(1));
+
     /* 拖动排序：按住三杠才允许拖，与点击展开区分；真实拖动后抑制本次 click */
     const grip = $('.bili-item__grip', card);
     grip.addEventListener('mousedown', () => { card.draggable = true; });
@@ -1491,6 +1576,12 @@
     saveSettings();
     if (settings.sound) sfx.select();
   });
+  $('#set-strict').addEventListener('change', (e) => {
+    settings.strictMode = e.target.checked;
+    saveSettings();
+    if (settings.sound) sfx.select();
+    toast(settings.strictMode ? '严格模式已开启：离开 3 秒即失败' : '已切回宽松模式：累计离开 3 分钟失败');
+  });
   $('#set-rain').addEventListener('change', (e) => {
     settings.defaultWhiteNoise = e.target.checked;
     saveSettings();
@@ -1525,17 +1616,74 @@
   });
   $('#set-clear').addEventListener('click', () => {
     const who = accountName ? '当前账号（' + accountName + '）的' : '本机的';
-    if (!confirm('将清空' + who + '全部专注记录、三个舱位存档与设置，且无法恢复。确定吗？')) return;
+    if (!confirm('将清空' + who + '全部专注记录与设置，且无法恢复。确定吗？')) return;
     if (!confirm('真的要让外星人忘记在地球上的一切吗？')) return;
     Object.keys(KEY).forEach(k => store.remove(KEY[k]));
     media.clear();
     state = freshState();
-    settings = { defaultMin: 25, sound: true };
-    slots = { 1: null, 2: null, 3: null };
+    settings = Object.assign({}, SETTINGS_DEFAULT);
     renderStats();
     syncSettingsUI();
+    renderAccountUI();
     closeModal('modal-settings');
     toast('所有数据已清空（含导入的音频与视频）');
+  });
+
+  /* ---------------- 数据导出 / 导入 ---------------- */
+  function exportData() {
+    const payload = {
+      app: 'behuman',
+      version: 2.49,
+      exportedAt: new Date().toISOString(),
+      account: accountName || '',
+      state: state,
+      settings: settings,
+      notes: store.get(KEY.notes, []),
+      profile: store.get(KEY.profile, {})
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'behuman-backup-' + today() + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    sfx.success();
+    toast('备份已导出，妥善保存');
+  }
+  $('#data-export').addEventListener('click', exportData);
+  $('#data-import').addEventListener('click', () => $('#data-import-file').click());
+  $('#data-import-file').addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      let data;
+      try { data = JSON.parse(String(reader.result)); } catch (err) { toast('文件不是有效的 JSON'); return; }
+      if (!data || data.app !== 'behuman' || !data.state || typeof data.state !== 'object' || Array.isArray(data.state)) {
+        toast('这不是 behuman 的备份文件');
+        return;
+      }
+      if (!confirm('导入会覆盖当前身份的记录、设置与日记，确定继续吗？')) return;
+      const nextState = Object.assign(freshState(), data.state);
+      if (!nextState.daily || typeof nextState.daily !== 'object') nextState.daily = {};
+      if (!Array.isArray(nextState.history)) nextState.history = [];
+      store.set(KEY.state, nextState);
+      store.set(KEY.settings, Object.assign({}, SETTINGS_DEFAULT, data.settings || {}));
+      if (Array.isArray(data.notes)) store.set(KEY.notes, data.notes);
+      if (data.profile) store.set(KEY.profile, data.profile);
+      state = nextState;
+      settings = Object.assign({}, SETTINGS_DEFAULT, data.settings || {});
+      renderStats();
+      syncSettingsUI();
+      renderAccountUI();
+      sfx.success();
+      toast('导入完成');
+    };
+    reader.readAsText(file);
   });
 
   /* ---------------- 意见反馈（通过 FormSubmit 转发到邮箱） ---------------- */
@@ -1997,32 +2145,411 @@
   $('#auth-tab-login').addEventListener('click', () => { setAuthMode('login'); sfx.select(); });
   $('#auth-tab-register').addEventListener('click', () => { setAuthMode('register'); sfx.select(); });
 
-  $('#btn-account').addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (accountName) {
-      $('#account-menu').hidden = !$('#account-menu').hidden;
+  /* ---------------- 个人档案：头像 / 周报 / 断线恢复 ---------------- */
+  const AVATARS = [
+    { bg: '#16284e', skin: '#a9e4f7', accent: '#7ce8ff' },
+    { bg: '#3a1f3a', skin: '#f2c4e0', accent: '#ff9fd0' },
+    { bg: '#123a32', skin: '#b9f0d8', accent: '#6fe3b8' },
+    { bg: '#3a2a12', skin: '#ffe0a8', accent: '#ffc35c' },
+    { bg: '#1e2a4a', skin: '#c9d4ff', accent: '#9db3ff' },
+    { bg: '#3a1620', skin: '#ffc9c9', accent: '#ff9191' }
+  ];
+  function avatarSVG(index, size) {
+    const n = AVATARS.length;
+    const a = AVATARS[((Number(index) || 0) % n + n) % n];
+    return '<svg viewBox="0 0 64 64" width="' + size + '" height="' + size + '" aria-hidden="true" focusable="false">' +
+      '<rect width="64" height="64" rx="32" fill="' + a.bg + '"/>' +
+      '<circle cx="50" cy="12" r="1.6" fill="#ffffff" opacity=".7"/>' +
+      '<circle cx="14" cy="18" r="1.2" fill="#ffffff" opacity=".5"/>' +
+      '<circle cx="45" cy="53" r="1.4" fill="' + a.accent + '" opacity=".6"/>' +
+      '<ellipse cx="32" cy="35" rx="21" ry="19.5" fill="' + a.skin + '" stroke="#0b1526" stroke-width="2"/>' +
+      '<ellipse cx="24.5" cy="34" rx="4.4" ry="5.6" fill="#0b1526"/>' +
+      '<ellipse cx="39.5" cy="34" rx="4.4" ry="5.6" fill="#0b1526"/>' +
+      '<circle cx="23" cy="32" r="1.5" fill="#ffffff"/>' +
+      '<circle cx="38" cy="32" r="1.5" fill="#ffffff"/>' +
+      '<path d="M27 43 q5 4.5 10 0" fill="none" stroke="#2f6f8e" stroke-width="2.4" stroke-linecap="round"/>' +
+      '<circle cx="17" cy="40" r="2" fill="#f7b9c4" opacity=".5"/>' +
+      '<circle cx="47" cy="40" r="2" fill="#f7b9c4" opacity=".5"/>' +
+      '</svg>';
+  }
+  const profileData = () => {
+    const p = store.get(KEY.profile, {});
+    return (p && typeof p === 'object' && !Array.isArray(p)) ? p : {};
+  };
+  const saveProfile = (patch) => store.set(KEY.profile, Object.assign({}, profileData(), patch));
+
+  /* 只认本机 canvas 生成的 data:image/...;base64；导入的备份也走这里过滤 */
+  function customAvatar(p) {
+    const v = p && p.custom;
+    return (typeof v === 'string' && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(v)) ? v : '';
+  }
+  function avatarMarkup(p, size) {
+    const custom = customAvatar(p);
+    if (custom) return '<img src="' + custom + '" alt="" />';
+    return avatarSVG(Number(p && p.avatar) || 0, size);
+  }
+  function renderAvatar() {
+    const p = profileData();
+    const top = $('#topbar-avatar');
+    if (top) top.innerHTML = avatarMarkup(p, 30);
+    const big = $('#profile-avatar');
+    if (big) big.innerHTML = avatarMarkup(p, 92);
+    const preview = $('#avatar-preview');
+    if (preview) preview.innerHTML = '<div class="profile-avatar">' + avatarMarkup(p, 96) + '</div>';
+    const row = $('#avatar-row');
+    if (row) {
+      if (!row.dataset.built) {
+        row.innerHTML = AVATARS.map((a, k) =>
+          '<button type="button" class="avatar-choice" data-avatar="' + k + '" aria-label="预设头像 ' + (k + 1) + '" aria-pressed="false">' +
+          avatarSVG(k, 44) + '</button>').join('');
+        row.dataset.built = '1';
+      }
+      const hasCustom = !!customAvatar(p);
+      $$('.avatar-choice', row).forEach((b, k) =>
+        b.setAttribute('aria-pressed', String(!hasCustom && (Number(p.avatar) || 0) === k)));
+    }
+    const reset = $('#avatar-reset-btn');
+    if (reset) reset.hidden = !customAvatar(p);
+  }
+
+  /* 把任意图片裁成 256×256 的 JPEG data URL，避免原图直接塞进 localStorage */
+  function fileToAvatar(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const S = 256;
+          const canvas = document.createElement('canvas');
+          canvas.width = S;
+          canvas.height = S;
+          const ctx = canvas.getContext('2d');
+          const scale = Math.max(S / img.naturalWidth, S / img.naturalHeight);
+          const w = img.naturalWidth * scale;
+          const h = img.naturalHeight * scale;
+          ctx.drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
+          URL.revokeObjectURL(url);
+          resolve(canvas.toDataURL('image/jpeg', 0.86));
+        } catch (err) {
+          URL.revokeObjectURL(url);
+          reject(err);
+        }
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode')); };
+      img.src = url;
+    });
+  }
+
+  const avatarRow = $('#avatar-row');
+  if (avatarRow) {
+    avatarRow.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-avatar]');
+      if (!btn) return;
+      saveProfile({ avatar: Number(btn.dataset.avatar), custom: '' });
+      renderAvatar();
+      sfx.select();
+    });
+  }
+  const avatarBtn = $('#profile-avatar-btn');
+  if (avatarBtn) {
+    avatarBtn.addEventListener('click', () => {
+      renderAvatar();
+      openModal('modal-avatar');
+    });
+  }
+  const avatarFile = $('#avatar-file');
+  const avatarUpload = $('#avatar-upload-btn');
+  if (avatarUpload && avatarFile) {
+    avatarUpload.addEventListener('click', () => avatarFile.click());
+    avatarFile.addEventListener('change', () => {
+      const file = avatarFile.files && avatarFile.files[0];
+      avatarFile.value = '';
+      if (!file) return;
+      if (!/^image\//.test(file.type)) { toast('请选择图片文件'); return; }
+      if (file.size > 12 * 1024 * 1024) { toast('图片请控制在 12MB 以内'); return; }
+      fileToAvatar(file).then((dataUrl) => {
+        saveProfile({ custom: dataUrl });
+        renderAvatar();
+        sfx.success();
+        toast('头像已更新');
+      }).catch(() => toast('这张图片读不出来，换一张试试'));
+    });
+  }
+  const avatarReset = $('#avatar-reset-btn');
+  if (avatarReset) {
+    avatarReset.addEventListener('click', () => {
+      saveProfile({ custom: '' });
+      renderAvatar();
+      toast('已恢复预设头像');
+    });
+  }
+
+  function ymd(d) {
+    const p = n => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+  const WEEK_CHARS = ['日', '一', '二', '三', '四', '五', '六'];
+  function weekDays() {
+    const out = [];
+    const now = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const key = ymd(d);
+      out.push({
+        key: key,
+        label: i === 0 ? '今天' : '周' + WEEK_CHARS[d.getDay()],
+        value: Number((state.daily && state.daily[key]) || 0),
+        today: i === 0
+      });
+    }
+    return out;
+  }
+  function streakDays() {
+    const has = k => Number((state.daily && state.daily[k]) || 0) > 0;
+    const d = new Date();
+    if (!has(ymd(d))) d.setDate(d.getDate() - 1);
+    let n = 0;
+    while (has(ymd(d)) && n < 3650) { n++; d.setDate(d.getDate() - 1); }
+    return n;
+  }
+  function chartSVG(days) {
+    const CW = 520, CH = 170, base = 126, maxH = 92, pad = 10, bw = 46;
+    const gap = (CW - pad * 2 - bw * 7) / 6;
+    const max = Math.max(30, ...days.map(d => d.value));
+    let out = '<line x1="' + pad + '" y1="' + (base + 1) + '" x2="' + (CW - pad) + '" y2="' + (base + 1) +
+      '" stroke="rgba(130,200,255,.25)" stroke-width="1"/>';
+    days.forEach((d, i) => {
+      const x = pad + i * (bw + gap);
+      const h = d.value > 0 ? Math.max(6, Math.round(d.value / max * maxH)) : 3;
+      const y = base - h;
+      const fill = d.today ? '#ffd98a' : '#7ce8ff';
+      out += '<rect x="' + x + '" y="' + y + '" width="' + bw + '" height="' + h + '" rx="6" fill="' + fill +
+        '" opacity="' + (d.value ? 0.92 : 0.22) + '"><title>' + d.label + '：' + d.value + ' 分钟</title></rect>';
+      if (d.value) out += '<text x="' + (x + bw / 2) + '" y="' + (y - 8) + '" text-anchor="middle" font-size="12" fill="#93a6c8">' + d.value + '</text>';
+      out += '<text x="' + (x + bw / 2) + '" y="' + (base + 24) + '" text-anchor="middle" font-size="12" fill="' +
+        (d.today ? '#ffd98a' : '#93a6c8') + '">' + d.label + '</text>';
+    });
+    return '<svg viewBox="0 0 ' + CW + ' ' + CH + '" width="100%" height="150" role="img" aria-label="近一周每天专注分钟数">' + out + '</svg>';
+  }
+  function fmtDuration(mins) {
+    const m = Number(mins) || 0;
+    const h = Math.floor(m / 60);
+    const r = m % 60;
+    return h > 0 ? (h + ' 小时 ' + (r ? r + ' 分' : '')).trim() : (m + ' 分钟');
+  }
+
+  /* ---------------- 专注明细 ---------------- */
+  const pad2 = (n) => String(n).padStart(2, '0');
+  function logTime(ts) {
+    const d = new Date(ts);
+    return pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  }
+  function dateKeyOf(ts) {
+    const d = new Date(ts);
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+  function pushHistory(rec) {
+    if (!Array.isArray(state.history)) state.history = [];
+    state.history.push(rec);
+    if (state.history.length > 200) state.history = state.history.slice(-200);
+    saveState();
+  }
+  const HISTORY_LABEL = { done: '完成', manual: '补录', abort: '主动放弃', caught: '被发现', away: '离开超时', strict: '严格模式' };
+  function renderHistory() {
+    const box = $('#profile-log-list');
+    if (!box) return;
+    const all = Array.isArray(state.history) ? state.history : [];
+    const list = all.slice().sort((a, b) => b.at - a.at).slice(0, 8);
+    const sum = $('#profile-log-sum');
+    if (sum) sum.textContent = all.length ? ('共 ' + all.length + ' 条') : '';
+    if (!list.length) {
+      box.innerHTML = '<p class="profile-log__empty">还没有记录，完成一次躲藏后会出现在这里。</p>';
+      return;
+    }
+    box.innerHTML = list.map(r => {
+      const label = HISTORY_LABEL[r.reason] || (r.ok ? '完成' : '中断');
+      return '<div class="log-item">' +
+        '<span class="log-item__time">' + logTime(r.at) + '</span>' +
+        '<span class="log-item__mins">' + (r.mins ? r.mins + ' 分钟' : '未计入') + '</span>' +
+        '<span class="log-item__tag ' + (r.ok ? 'is-ok' : 'is-bad') + '">' +
+          (r.rounds > 1 ? label + ' · ' + r.rounds + ' 轮' : label) + '</span>' +
+        '<button class="log-item__del" type="button" data-at="' + r.at + '" aria-label="删除这条记录">×</button>' +
+      '</div>';
+    }).join('');
+  }
+  function deleteHistory(at) {
+    const idx = (state.history || []).findIndex(r => r.at === at);
+    if (idx < 0) return;
+    const rec = state.history[idx];
+    if (rec.mins) {
+      state.totalMinutes = Math.max(0, (state.totalMinutes || 0) - rec.mins);
+      const d = dateKeyOf(rec.at);
+      if (state.daily && state.daily[d]) state.daily[d] = Math.max(0, state.daily[d] - rec.mins);
+    }
+    if (rec.ok) {
+      const rounds = rec.rounds || 1;
+      state.success = Math.max(0, (state.success || 0) - rounds);
+      state.sessions = Math.max(0, (state.sessions || 0) - rounds);
     } else {
-      setAuthMode('login');
-      $('#auth-name').value = '';
-      $('#auth-pwd').value = '';
-      $('#auth-pwd2').value = '';
-      $('#auth-err').hidden = true;
-      openModal('modal-auth');
-      setTimeout(() => $('#auth-name').focus(), 300);
+      state.failed = Math.max(0, (state.failed || 0) - 1);
+      state.interruptions = Math.max(0, (state.interruptions || 0) - 1);
+      /* 连续模式中途失败时，已完成的轮次也计过成功 */
+      if (rec.mins > 0) {
+        const rounds = rec.rounds || 1;
+        state.success = Math.max(0, (state.success || 0) - rounds);
+        state.sessions = Math.max(0, (state.sessions || 0) - rounds);
+      }
     }
+    state.history.splice(idx, 1);
+    saveState();
+    renderStats();
+    renderProfile();
+    toast('已删除这条记录');
+  }
+  function addManualSession(raw) {
+    const m = Math.round(Number(raw));
+    if (!m || m < 1 || m > 600) { toast('请输入 1–600 分钟'); return; }
+    const t = today();
+    state.totalMinutes = (state.totalMinutes || 0) + m;
+    if (!state.daily) state.daily = {};
+    state.daily[t] = (state.daily[t] || 0) + m;
+    if (state.days.indexOf(t) === -1) state.days.push(t);
+    state.success = (state.success || 0) + 1;
+    state.sessions = (state.sessions || 0) + 1;
+    state.longestMinutes = Math.max(state.longestMinutes || 0, m);
+    pushHistory({ at: Date.now(), mins: m, ok: true, rounds: 1, reason: 'manual' });
+    saveState();
+    renderStats();
+    renderProfile();
+    const input = $('#profile-log-min');
+    if (input) input.value = '';
+    toast('已补录 ' + m + ' 分钟');
+  }
+  function renderProfile() {
+    const name = accountName || '游客';
+    $('#profile-title').textContent = name;
+    $('#profile-sub').textContent = accountName
+      ? '记录只保存在这台设备的浏览器里'
+      : '登录后记录会独立保存，并可导出备份';
+    const breaks = Number((state.interruptions != null ? state.interruptions : state.failed) || 0);
+    $('#profile-stats').innerHTML =
+      '<div><strong>' + fmtDuration(state.totalMinutes) + '</strong><small>专注时长</small></div>' +
+      '<div title="主动放弃、被发现或离开超时的次数"><strong>' + breaks + ' 次</strong><small>断开次数</small></div>' +
+      '<div><strong>' + streakDays() + ' 天</strong><small>连续躲藏</small></div>';
+    const days = weekDays();
+    const total = days.reduce((a, b) => a + b.value, 0);
+    $('#profile-week-sum').textContent = total
+      ? ('合计 ' + total + ' 分钟 · 日均 ' + Math.round(total / 7) + ' 分')
+      : '还没有记录';
+    $('#profile-chart').innerHTML = chartSVG(days);
+    renderHistory();
+    $('#profile-auth').hidden = !!accountName;
+    $('#profile-logout').hidden = !accountName;
+    renderAvatar();
+  }
+  function openProfile() {
+    renderProfile();
+    openModal('modal-profile');
+  }
+  function openAuth(mode) {
+    setAuthMode(mode || 'login');
+    $('#auth-name').value = '';
+    $('#auth-pwd').value = '';
+    $('#auth-pwd2').value = '';
+    $('#auth-err').hidden = true;
+    openModal('modal-auth');
+    setTimeout(() => $('#auth-name').focus(), 320);
+  }
+
+  $('#btn-account').addEventListener('click', openProfile);
+  $('#profile-auth').addEventListener('click', () => {
+    closeModal('modal-profile');
+    setTimeout(() => openAuth('login'), 260);
   });
-  document.addEventListener('click', (e) => {
-    const menu = $('#account-menu');
-    if (!menu.hidden && !e.target.closest('#account-menu') && !e.target.closest('#btn-account')) {
-      menu.hidden = true;
-    }
-  });
-  $('#btn-logout').addEventListener('click', () => {
+  $('#profile-logout').addEventListener('click', () => {
     accountLogout();
-    $('#account-menu').hidden = true;
+    closeModal('modal-profile');
     sfx.select();
     toast('已退出登录，回到游客身份');
   });
+  const profileLogList = $('#profile-log-list');
+  if (profileLogList) {
+    profileLogList.addEventListener('click', (e) => {
+      const btn = e.target.closest('.log-item__del');
+      if (btn) deleteHistory(Number(btn.dataset.at));
+    });
+  }
+  const profileLogAdd = $('#profile-log-add');
+  if (profileLogAdd) {
+    profileLogAdd.addEventListener('click', () => addManualSession($('#profile-log-min').value));
+    $('#profile-log-min').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addManualSession($('#profile-log-min').value); }
+    });
+  }
+
+  /* ---------------- 断线恢复 ---------------- */
+  let pendingLive = null;
+  let liveChecked = false;
+  function checkLiveSession() {
+    if (liveChecked) return;
+    liveChecked = true;
+    const live = store.get(KEY.live, null);
+    if (!live) return;
+    if (live.phase !== 'focus') { store.remove(KEY.live); return; }
+    const remain = live.endAt - Date.now();
+    /* 超时 2 分钟以上不再允许「一键补回整段时长」 */
+    if (remain <= -2 * 60000) {
+      store.remove(KEY.live);
+      setTimeout(() => toast('上次的躲藏已经超时，没有计入'), 1200);
+      return;
+    }
+    pendingLive = live;
+    $('#resume-text').innerHTML =
+      (remain > 0 ? '还剩 <strong>' + fmtTime(remain) + '</strong>。' : '计时已经走完。') +
+      '<br/>要接着把这轮躲完吗？';
+    openModal('modal-resume');
+  }
+  $('#resume-continue').addEventListener('click', () => {
+    closeModal('modal-resume');
+    const live = pendingLive;
+    pendingLive = null;
+    if (live) resumeLiveSession(live);
+  });
+  $('#resume-discard').addEventListener('click', () => {
+    store.remove(KEY.live);
+    pendingLive = null;
+    closeModal('modal-resume');
+    toast('已经放弃这次躲藏');
+  });
+  function resumeLiveSession(live) {
+    if (live.endAt - Date.now() <= -2 * 60000) {
+      clearLive();
+      toast('这次躲藏已经超时，没有计入');
+      return;
+    }
+    focus.phase = 'focus';
+    focus.running = true;
+    focus.continuous = !!live.continuous;
+    focus.focusMin = live.focusMin || live.minutes;
+    focus.breakMs = live.breakMs || 10 * 60000;
+    focus.round = live.round || 1;
+    focus.totalRounds = live.totalRounds ? live.totalRounds : Infinity;
+    focus.minutes = live.minutes;
+    focus.totalMs = live.totalMs || live.minutes * 60000;
+    focus.endAt = live.endAt;
+    focus.cycleMinutes = live.cycleMinutes || 0;
+    focus.risk = 0;
+    focus.hiddenAt = 0;
+    focus.awayTotal = live.awayTotal || 0;
+    focus.sessionStart = live.sessionStart || Date.now();
+    focus.statusIdx = 0;
+    paintFocusRun();
+    document.title = '🛸 专注中 ' + fmtTime(Math.max(0, focus.endAt - Date.now())) + ' · behuman';
+    startFocusTimers();
+    startBgm();
+    saveLive();
+    toast('接着躲，别出声');
+  }
 
   $('#auth-submit').addEventListener('click', async () => {
     const name = $('#auth-name').value.trim();
@@ -2057,6 +2584,7 @@
   if (store.get(KEY.intro, {}).watched) {
     $('#intro').hidden = true;
     showApp();
+    if (location.hash === '#profile') setTimeout(openProfile, 900);
   } else {
     $('#app').hidden = true;
     intro.play();
